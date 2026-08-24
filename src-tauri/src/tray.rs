@@ -1,11 +1,12 @@
-//! 系统托盘：菜单四项（对等旧 pystray）+ 关窗隐藏 + 托盘退出。
+//! 系统托盘：菜单四项 + 左键单击开窗 + 右键菜单（对等旧 pystray 语义）+ 关窗隐藏 + 托盘退出。
 
 use tauri::{
     menu::{CheckMenuItem, MenuBuilder, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, Runtime,
 };
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::daemon;
 
@@ -32,13 +33,32 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::err
         .item(&quit)
         .build()?;
 
+    // dev 模式 autostart 勾选回滚用（见 on_menu_event 内说明）
+    let autostart_item = autostart.clone();
+
     TrayIconBuilder::with_id("main-tray")
+        // 左键不弹菜单（默认 true 会弹且吞掉点击事件），
+        // 复刻旧 pystray 语义：左键单击=打开主界面，右键=菜单
+        .show_menu_on_left_click(false)
         .menu(&menu)
         .tooltip("llm-apig API 网关")
         .icon(app.default_window_icon().cloned().unwrap())
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => show_main(app),
             "autostart" => {
+                // dev 模式（tauri dev）不写注册表：开发构建的路径与正式安装不符，
+                // 写入的自启项会指向错误目标，正式安装后也不会被清理
+                if cfg!(dev) {
+                    // CheckMenuItem 勾选已被 Tauri 自动翻转，读到的即翻转后的值，
+                    // 再取反设置回去即回滚到切换前状态
+                    let toggled = autostart_item.is_checked().unwrap_or(false);
+                    let _ = autostart_item.set_checked(!toggled);
+                    app.dialog()
+                        .message("开发模式下不可设置开机自启")
+                        .kind(MessageDialogKind::Warning)
+                        .show(|_| {});
+                    return;
+                }
                 let mgr = app.autolaunch();
                 let enabled = mgr.is_enabled().unwrap_or(false);
                 let result = if enabled { mgr.disable() } else { mgr.enable() };
@@ -70,8 +90,10 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::err
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::DoubleClick {
+            // 左键单击（抬起）=打开主界面，复刻旧 pystray 语义；右键=菜单（默认行为）
+            if let TrayIconEvent::Click {
                 button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
                 ..
             } = event
             {
