@@ -278,3 +278,70 @@ async def mapping_move(mid: int, dir: str = "up"):
     finally:
         conn.close()
     return RedirectResponse(f"/admin/groups/{gid}", status_code=303)
+
+
+@router.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request, status: str = "", q: str = ""):
+    sql = "SELECT * FROM request_log WHERE 1=1"
+    args: list = []
+    if status:
+        sql += " AND status=?"; args.append(status)
+    if q:
+        sql += " AND group_name LIKE ?"; args.append(f"%{q}%")
+    sql += " ORDER BY id DESC LIMIT 200"
+    conn = connect()
+    try:
+        logs = conn.execute(sql, args).fetchall()
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "logs.html",
+                                      {"logs": logs, "status": status, "q": q})
+
+
+@router.get("/logs/{log_id}", response_class=HTMLResponse)
+async def log_detail(request: Request, log_id: int):
+    conn = connect()
+    try:
+        log = conn.execute("SELECT * FROM request_log WHERE id=?",
+                           (log_id,)).fetchone()
+        attempts = conn.execute(
+            "SELECT * FROM attempt WHERE log_id=? ORDER BY id",
+            (log_id,)).fetchall()
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "log_detail.html", {
+        "log": log, "attempts": attempts})
+
+
+_SETTING_KEYS = ["cooldown_balance", "cooldown_ratelimit", "cooldown_auth",
+                 "cooldown_server", "api_key", "balance_patterns",
+                 "capability_patterns"]
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    from app.db import get_setting
+    from app.errors import BALANCE_PATTERNS, CAPABILITY_PATTERNS
+    conn = connect()
+    try:
+        values = {k: get_setting(conn, k, "") for k in _SETTING_KEYS}
+    finally:
+        conn.close()
+    if not values["balance_patterns"]:
+        values["balance_patterns"] = "\n".join(BALANCE_PATTERNS)
+    if not values["capability_patterns"]:
+        values["capability_patterns"] = "\n".join(CAPABILITY_PATTERNS)
+    return templates.TemplateResponse(request, "settings.html", {"v": values})
+
+
+@router.post("/settings")
+async def settings_save(request: Request):
+    from app.db import set_setting
+    form = await request.form()
+    conn = connect()
+    try:
+        for k in _SETTING_KEYS:
+            set_setting(conn, k, str(form.get(k, "")))
+    finally:
+        conn.close()
+    return RedirectResponse("/admin/settings", status_code=303)

@@ -41,18 +41,22 @@ def _matches(body_lower: str, patterns: list[str]) -> str | None:
     return None
 
 
-def classify_error(status: int | None, body: str) -> Verdict:
+def classify_error(status: int | None, body: str,
+                   balance_patterns: list[str] | None = None,
+                   capability_patterns: list[str] | None = None) -> Verdict:
+    balance_patterns = balance_patterns or BALANCE_PATTERNS
+    capability_patterns = capability_patterns or CAPABILITY_PATTERNS
     body_lower = (body or "").lower()
 
     if status is None:
         return Verdict(ErrorCategory.SERVER, True, 60, f"network error: {body[:200]}")
 
-    hit = _matches(body_lower, BALANCE_PATTERNS)
+    hit = _matches(body_lower, balance_patterns)
     if status == 402 or hit:
         return Verdict(ErrorCategory.INSUFFICIENT_BALANCE, True, 600,
                        f"balance insufficient (matched: {hit or 'http 402'})")
 
-    hit = _matches(body_lower, CAPABILITY_PATTERNS)
+    hit = _matches(body_lower, capability_patterns)
     if status == 400 and hit:
         return Verdict(ErrorCategory.CAPABILITY_UNSUPPORTED, True, 0,
                        f"capability unsupported (matched: {hit})")

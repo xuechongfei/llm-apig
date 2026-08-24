@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>请求 #{{ log["id"] }}（{{ log["status"] }}）</h2>
+<p>协议: {{ log["client_protocol"] }} ｜ 模型: {{ log["group_name"] }} ｜
+路径: {{ log["path"] }} ｜ 耗时: {{ log["total_duration_ms"] }}ms</p>
+<h3>尝试链</h3>
+<table>
+<tr><th>#</th><th>渠道</th><th>真实模型</th><th>转换</th><th>HTTP</th>
+<th>错误类别</th><th>摘要</th></tr>
+{% for a in attempts %}
+<tr>
+<td>{{ loop.index }}</td>
+<td>{{ a["channel_name"] or "-" }}{{ "（跳过: " ~ a["skipped"] ~ "）" if a["skipped"] }}</td>
+<td>{{ a["actual_model"] or "-" }}</td>
+<td>{{ "是" if a["converted"] else "否" }}</td>
+<td>{{ a["http_status"] or "-" }}</td>
+<td>{{ a["error_category"] or "-" }}</td>
+<td>{{ a["error_summary"] or "-" }}</td>
+</tr>
+{% if a["raw_error"] %}
+<tr><td></td><td colspan="6"><pre style="white-space:pre-wrap;font-size:12px">{{ a["raw_error"] }}</pre></td></tr>
+{% endif %}
+{% endfor %}
+</table>
+{% endblock %}

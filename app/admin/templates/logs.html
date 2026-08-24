@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>请求日志</h2>
+<form method="get">
+<input name="q" placeholder="模型名过滤" value="{{ q }}" style="width:200px">
+<select name="status" style="width:140px">
+<option value="">全部状态</option>
+<option value="success" {{ "selected" if status=="success" }}>success</option>
+<option value="failed" {{ "selected" if status=="failed" }}>failed</option>
+</select>
+<button>过滤</button>
+</form>
+<table>
+<tr><th>ID</th><th>时间</th><th>协议</th><th>模型</th><th>流式</th>
+<th>状态</th><th>耗时</th><th>tokens(in/out)</th><th></th></tr>
+{% for l in logs %}
+<tr>
+<td>{{ l["id"] }}</td><td>{{ l["created_at"] | round(0) | int }}</td>
+<td>{{ l["client_protocol"] }}</td><td>{{ l["group_name"] }}</td>
+<td>{{ "是" if l["stream"] }}</td>
+<td><span class="badge {{ 'ok' if l["status"]=='success' else 'bad' }}">{{ l["status"] }}</span></td>
+<td>{{ l["total_duration_ms"] }}ms</td>
+<td>{{ l["input_tokens"] }}/{{ l["output_tokens"] }}</td>
+<td><a href="/admin/logs/{{ l["id"] }}">详情</a></td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

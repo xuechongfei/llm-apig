@@ -72,6 +72,14 @@ def _cooldown_seconds(conn, category: str, default: int) -> int:
         return fallback
 
 
+def _patterns(conn) -> tuple[list[str] | None, list[str] | None]:
+    def load(key: str) -> list[str] | None:
+        raw = get_setting(conn, key, "")
+        lines = [ln.strip().lower() for ln in raw.splitlines() if ln.strip()]
+        return lines or None
+    return load("balance_patterns"), load("capability_patterns")
+
+
 def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=_transport, timeout=httpx.Timeout(120.0, connect=15.0))
 
@@ -82,6 +90,7 @@ async def execute(conn, *, entry_protocol: str, group_name: str,
     modalities = detect_modalities(payload)
     candidates, skipped = select_candidates(
         conn, group_name, entry_protocol, modalities)
+    bp, cp = _patterns(conn)
     log_id = create_log(conn, client_protocol=entry_protocol,
                         group_name=group_name,
                         path="/v1/messages" if entry_protocol == "anthropic"
@@ -120,7 +129,7 @@ async def execute(conn, *, entry_protocol: str, group_name: str,
         if stream:
             result, consumed = await _try_stream(
                 conn, log_id, cand, entry_protocol, url, headers,
-                upstream_payload, started, group_name)
+                upstream_payload, started, group_name, bp, cp)
             if result is not None:
                 return result
             last_status, last_body = consumed
@@ -128,7 +137,7 @@ async def execute(conn, *, entry_protocol: str, group_name: str,
 
         result, consumed = await _try_non_stream(
             conn, log_id, cand, entry_protocol, url, headers,
-            upstream_payload, started, group_name)
+            upstream_payload, started, group_name, bp, cp)
         if result is not None:
             return result
         last_status, last_body = consumed
@@ -145,7 +154,8 @@ def _elapsed(started: float) -> int:
 
 
 async def _try_non_stream(conn, log_id, cand, entry_protocol, url, headers,
-                          upstream_payload, started, group_name):
+                          upstream_payload, started, group_name,
+                          bp=None, cp=None):
     """返回 (GatewayResult | None, (status, body))。None 表示失败已记录可重试。"""
     try:
         async with _client() as client:
@@ -170,7 +180,7 @@ async def _try_non_stream(conn, log_id, cand, entry_protocol, url, headers,
         return GatewayResult(resp.status_code, body=body), (resp.status_code, body)
 
     body_text = resp.text
-    verdict = classify_error(resp.status_code, body_text)
+    verdict = classify_error(resp.status_code, body_text, bp, cp)
     _record_failure(conn, log_id, cand, verdict, resp.status_code, body_text)
     if not verdict.retryable:
         finish_log(conn, log_id, status="failed", total_ms=_elapsed(started),
@@ -203,7 +213,8 @@ def _record_failure(conn, log_id, cand, verdict, http_status, raw: str) -> None:
 
 
 async def _try_stream(conn, log_id, cand, entry_protocol, url, headers,
-                      upstream_payload, started, group_name):
+                      upstream_payload, started, group_name,
+                      bp=None, cp=None):
     """流式尝试。状态码错误（未读 body）可安全重试；2xx 后产出事件生成器。"""
     try:
         client = _client()
@@ -218,7 +229,7 @@ async def _try_stream(conn, log_id, cand, entry_protocol, url, headers,
         raw = (await resp.aread()).decode("utf-8", "replace")
         await resp.aclose()
         await client.aclose()
-        verdict = classify_error(resp.status_code, raw)
+        verdict = classify_error(resp.status_code, raw, bp, cp)
         _record_failure(conn, log_id, cand, verdict, resp.status_code, raw)
         if not verdict.retryable:
             finish_log(conn, log_id, status="failed",

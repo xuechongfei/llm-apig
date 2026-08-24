@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>设置</h2>
+<form method="post" style="max-width:560px">
+<label>余额不足冷却秒数</label><input name="cooldown_balance" value="{{ v['cooldown_balance'] or '600' }}">
+<label>限流冷却秒数</label><input name="cooldown_ratelimit" value="{{ v['cooldown_ratelimit'] or '60' }}">
+<label>鉴权失败冷却秒数</label><input name="cooldown_auth" value="{{ v['cooldown_auth'] or '1800' }}">
+<label>服务器错误冷却秒数</label><input name="cooldown_server" value="{{ v['cooldown_server'] or '60' }}">
+<label>网关访问令牌（留空则不校验；客户端用它作 api key）</label>
+<input name="api_key" value="{{ v['api_key'] }}">
+<label>余额不足特征（每行一条，小写匹配）</label>
+<textarea name="balance_patterns" rows="6" style="width:100%">{{ v["balance_patterns"] }}</textarea>
+<label>能力不支持特征（每行一条，小写匹配）</label>
+<textarea name="capability_patterns" rows="6" style="width:100%">{{ v["capability_patterns"] }}</textarea>
+<button>保存</button>
+</form>
+{% endblock %}
