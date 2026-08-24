@@ -13,14 +13,14 @@ def is_enabled(key_path: str = RUN_KEY) -> bool:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
             value, _ = winreg.QueryValueEx(k, APP_NAME)
-        return value == sys.executable
+        return value.strip('"') == sys.executable
     except OSError:
         return False
 
 
 def enable(key_path: str = RUN_KEY) -> None:
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path) as k:
-        winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, sys.executable)
+        winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, f'"{sys.executable}"')
 
 
 def disable(key_path: str = RUN_KEY) -> None:

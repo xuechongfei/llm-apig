@@ -48,7 +48,12 @@ def main() -> None:
     window = webview.create_window(
         "llm-apig", f"http://127.0.0.1:{port}/admin", width=1200, height=800)
 
+    icon = None
+    quitting = False
+
     def on_closing():
+        if quitting or icon is None:  # 正在退出 / 无托盘时直接放行关闭
+            return
         window.hide()  # 缩到托盘，服务继续
         return False
 
@@ -59,7 +64,7 @@ def main() -> None:
 
     def on_check_update():
         try:
-            r = httpx.get(f"http://127.0.0.1:{port}/admin/api/update",
+            r = httpx.get(f"http://127.0.0.1:{port}/admin/api/update?fresh=1",
                           timeout=15)
             info = r.json().get("update")
         except httpx.HTTPError:
@@ -76,9 +81,10 @@ def main() -> None:
                 0, "已是最新版本", "llm-apig", 0x40)
 
     def on_quit():
+        nonlocal quitting
+        quitting = True
         window.destroy()
 
-    icon = None
     try:
         from desktop import tray
         icon = tray.create_tray(on_open, on_check_update, on_quit)
@@ -86,7 +92,18 @@ def main() -> None:
     except Exception:
         log.exception("托盘初始化失败（不影响使用）")
 
-    webview.start()  # 阻塞直到窗口销毁（退出）
+    try:
+        webview.start()  # 阻塞直到窗口销毁（退出）
+    except Exception as e:
+        log.exception("窗口启动失败")
+        show_error(f"界面启动失败：{e}\n\n若提示 WebView2 相关错误，请安装 "
+                   f"WebView2 运行时：https://developer.microsoft.com/microsoft-edge/webview2/\n\n"
+                   f"日志：{paths.log_dir() / 'app.log'}")
+        if icon:
+            icon.stop()
+        gw.stop()
+        lock.release()
+        return
 
     if icon:
         icon.stop()

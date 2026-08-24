@@ -213,8 +213,8 @@ select:focus-visible,textarea:focus-visible{outline:2px solid #1b6fc2;
   </div>
 </aside>
 <main>
-<div id="upd-banner" hidden
-     style="display:flex;align-items:center;gap:10px;margin:0 0 18px;padding:10px 16px;
+<div id="upd-banner"
+     style="display:none;align-items:center;gap:10px;margin:0 0 18px;padding:10px 16px;
             background:var(--warn-bg);color:var(--warn);border-radius:var(--radius);
             font-size:13px">
   <span id="upd-text"></span>
@@ -231,7 +231,7 @@ select:focus-visible,textarea:focus-visible{outline:2px solid #1b6fc2;
       '新版本 ' + d.update.latest + ' 可用' + (d.update.notes ? '：' + d.update.notes : '');
     var a = document.getElementById('upd-link');
     if(d.update.url){ a.href = d.update.url; a.target = '_blank'; } else { a.remove(); }
-    document.getElementById('upd-banner').hidden = false;
+    document.getElementById('upd-banner').style.display = 'flex';
   }).catch(function(){});
 })();
 </script>

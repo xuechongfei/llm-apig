@@ -8,7 +8,6 @@
   </div>
 </div>
 
-{% set ok_n = channels | selectattr("enabled") | selectattr("last_error", "none") | list | length %}
 {% set ns = namespace(cool=0, off=0) %}
 {% for c in channels %}
   {% if not c["enabled"] %}{% set ns.off = ns.off + 1 %}

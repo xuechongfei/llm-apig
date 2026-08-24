@@ -31,9 +31,10 @@ def current_version() -> str:
         return tomllib.load(f)["project"]["version"]
 
 
-async def get_update_info() -> dict:
+async def get_update_info(force: bool = False) -> dict:
     now = time.time()
-    if _cache.get("result") is not None and now - _cache.get("at", 0.0) < CACHE_SECONDS:
+    if not force and _cache.get("result") is not None \
+            and now - _cache.get("at", 0.0) < CACHE_SECONDS:
         return _cache["result"]
     from app.db import connect, get_setting
     conn = connect()
@@ -47,6 +48,8 @@ async def get_update_info() -> dict:
             async with httpx.AsyncClient(transport=_transport, timeout=10) as client:
                 resp = await client.get(url)
             data = resp.json()
+            if not isinstance(data, dict):
+                data = {}
             latest = str(data.get("version", ""))
             if latest and version_gt(latest, current_version()):
                 result = {"update": {"latest": latest,

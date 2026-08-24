@@ -22,7 +22,7 @@ def test_roundtrip():
         assert autostart.is_enabled(TEST_KEY)
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, TEST_KEY) as k:
             value, _ = winreg.QueryValueEx(k, "llm-apig")
-        assert value == sys.executable
+        assert value.strip('"') == sys.executable
         autostart.disable(TEST_KEY)
         assert not autostart.is_enabled(TEST_KEY)
     finally:

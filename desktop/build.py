@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -104,10 +103,13 @@ def smoke() -> None:
             proc.kill()
             raise SystemExit("冒烟失败：30s 内未写出 runtime.json")
         import httpx
-        r = httpx.get(f"http://127.0.0.1:{port}/health", timeout=5)
-        assert r.json() == {"status": "ok"}, "冒烟失败：健康检查未通过"
-        proc.terminate()
-        proc.wait(timeout=10)
+        try:
+            r = httpx.get(f"http://127.0.0.1:{port}/health", timeout=5)
+            assert r.json() == {"status": "ok"}, "冒烟失败：健康检查未通过"
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)
     print(f"冒烟通过（端口 {port}）")
 
 

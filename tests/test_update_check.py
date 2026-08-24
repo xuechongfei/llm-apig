@@ -68,3 +68,16 @@ async def test_update_info_network_error_silent(tmp_path, monkeypatch):
     monkeypatch.setattr(uc, "_transport", httpx.MockTransport(boom))
     uc._cache.clear()
     assert await uc.get_update_info() == {"update": None}
+
+
+async def test_update_info_non_dict_json(tmp_path, monkeypatch):
+    """远端返回数组等非对象 JSON 时静默返回无更新，不抛 AttributeError"""
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    db.init_db()
+    conn = db.connect()
+    db.set_setting(conn, "update_url", "http://x/version.json")
+    conn.close()
+    monkeypatch.setattr(uc, "_transport", httpx.MockTransport(
+        lambda req: httpx.Response(200, json=[1, 2])))
+    uc._cache.clear()
+    assert await uc.get_update_info() == {"update": None}

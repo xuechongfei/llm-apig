@@ -81,3 +81,46 @@ async def test_settings_page_shows_update_url(tmp_path, monkeypatch):
         r = await c.get("/admin/settings")
     assert r.status_code == 200
     assert "http://jihulab/x/version.json" in r.text
+
+
+async def test_settings_save_invalidates_update_cache(tmp_path, monkeypatch):
+    """保存 update_url 后 /admin/api/update 立即反映新值（不命中旧缓存）"""
+    _setup(tmp_path, monkeypatch)
+    uc._cache.clear()
+    monkeypatch.setattr(uc, "_transport", httpx.MockTransport(
+        lambda req: httpx.Response(200, json={
+            "version": "99.0.0", "notes": "", "url": "http://rel"})))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://t",
+                                 follow_redirects=False) as c:
+        r = await c.get("/admin/api/update")  # 无 update_url → 缓存 {update: None}
+        assert r.json() == {"update": None}
+        r = await c.post("/admin/settings", data={
+            "update_url": "http://x/version.json"})
+        assert r.status_code == 303
+        r = await c.get("/admin/api/update")  # 缓存已清 → 重新检查
+        assert r.json()["update"]["latest"] == "99.0.0"
+
+
+async def test_update_api_fresh_bypasses_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    db.init_db()
+    conn = db.connect()
+    db.set_setting(conn, "update_url", "http://x/version.json")
+    conn.close()
+    uc._cache.clear()
+
+    async def call(payload, fresh=False):
+        monkeypatch.setattr(uc, "_transport", httpx.MockTransport(
+            lambda req: httpx.Response(200, json=payload)))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://t") as c:
+            r = await c.get("/admin/api/update" + ("?fresh=1" if fresh else ""))
+        return r.json()
+
+    no_new = {"version": uc.current_version()}  # 同版本 → 无更新
+    assert (await call({"version": "99.0.0"}))["update"]["latest"] == "99.0.0"
+    # 缓存命中：即使远端已无新版本，仍返回旧的 99.0.0
+    assert (await call(no_new))["update"]["latest"] == "99.0.0"
+    # fresh=1 绕过缓存
+    assert await call(no_new, fresh=True) == {"update": None}
