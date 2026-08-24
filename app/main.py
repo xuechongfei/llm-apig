@@ -5,8 +5,11 @@ import uvicorn
 from fastapi import FastAPI
 
 from app.db import init_db
+from app.router_anthropic import router as anthropic_router
 
 app = FastAPI(title="llm-apig")
+
+app.include_router(anthropic_router)
 
 
 @app.get("/health")
