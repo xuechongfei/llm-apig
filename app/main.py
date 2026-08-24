@@ -1,3 +1,4 @@
+import os
 import threading
 import webbrowser
 
@@ -23,7 +24,9 @@ async def health():
 
 def main():
     init_db()
-    threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:8317/admin")).start()
+    if not os.environ.get("LLMAPIG_DATA_DIR"):  # 桌面模式由壳开窗口
+        threading.Timer(1.0,
+                        lambda: webbrowser.open("http://127.0.0.1:8317/admin")).start()
     uvicorn.run(app, host="127.0.0.1", port=8317)
 
 

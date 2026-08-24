@@ -21,3 +21,18 @@ def test_settings_roundtrip(tmp_path, monkeypatch):
     db.set_setting(conn, "cooldown_balance", "300")
     assert db.get_setting(conn, "cooldown_balance", "600") == "300"
     conn.close()
+
+
+def test_db_path_env_override(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", None)
+    monkeypatch.setenv("LLMAPIG_DATA_DIR", str(tmp_path))
+    db.init_db()
+    assert (tmp_path / "gateway.db").exists()
+
+
+def test_db_path_explicit_wins(tmp_path, monkeypatch):
+    monkeypatch.setenv("LLMAPIG_DATA_DIR", str(tmp_path / "env"))
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "explicit.db")
+    db.init_db()
+    assert (tmp_path / "explicit.db").exists()
+    assert not (tmp_path / "env").exists()

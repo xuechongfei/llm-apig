@@ -1,7 +1,17 @@
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "gateway.db"
+DB_PATH: Path | None = None  # 测试注入点；None 时按 _db_path() 解析
+
+
+def _db_path() -> Path:
+    if DB_PATH is not None:
+        return DB_PATH
+    env = os.environ.get("LLMAPIG_DATA_DIR")
+    if env:
+        return Path(env) / "gateway.db"
+    return Path(__file__).resolve().parent.parent / "data" / "gateway.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS channel (
@@ -65,8 +75,9 @@ CREATE TABLE IF NOT EXISTS channel_state (
 
 
 def connect() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    path = _db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
