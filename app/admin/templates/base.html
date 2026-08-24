@@ -2,28 +2,219 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>llm-apig</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}llm-apig{% endblock %} · API 网关</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f2b46'/%3E%3Crect x='7' y='10' width='18' height='2.5' rx='1.25' fill='%23fff'/%3E%3Crect x='7' y='15' width='13' height='2.5' rx='1.25' fill='%237fb0dd'/%3E%3Crect x='7' y='20' width='16' height='2.5' rx='1.25' fill='%23fff'/%3E%3C/svg%3E">
 <style>
-body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:16px;color:#222}
-nav a{margin-right:16px}
-table{border-collapse:collapse;width:100%;margin-top:12px}
-th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;font-size:14px}
-.badge{padding:2px 8px;border-radius:10px;font-size:12px}
-.ok{background:#d3f9d8}.bad{background:#ffe3e3}.cool{background:#fff3bf}
-button{cursor:pointer}input,select{padding:5px;margin:4px 0;width:100%;box-sizing:border-box}
+/* ── 设计令牌 ─────────────────────────────────────────── */
+:root{
+  --ink:#18212b;          /* 正文墨色 */
+  --ink-soft:#5a6672;     /* 次级文字 */
+  --ink-faint:#8b949e;    /* 辅助说明 */
+  --paper:#f5f7f9;        /* 画布 */
+  --card:#ffffff;         /* 卡片面 */
+  --hairline:#e4e9ee;     /* 发丝分隔 */
+  --brand:#0f2b46;        /* 主色·深海军蓝 */
+  --brand-ink:#eaf3fc;    /* 主色浅底 */
+  --ok:#1a7f4e;   --ok-bg:#e8f6ee;
+  --bad:#b3403a;  --bad-bg:#fbeeed;
+  --warn:#8a6a1f; --warn-bg:#faf3df;
+  --radius:14px;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:var(--sans);background:var(--paper);color:var(--ink);
+  font-size:14px;line-height:1.6}
+
+/* ── 侧栏布局 ─────────────────────────────────────────── */
+.layout{display:grid;grid-template-columns:216px 1fr;min-height:100vh}
+aside{position:sticky;top:0;height:100vh;box-sizing:border-box;
+  padding:26px 18px;background:var(--brand);
+  display:flex;flex-direction:column;gap:30px}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;
+  padding:0 8px;text-decoration:none}
+.brand-mark{width:26px;height:26px;flex:none;border-radius:7px;
+  background:linear-gradient(135deg,#3fa9f5 0%,#1b6fc2 100%);
+  position:relative}
+.brand-mark::before,.brand-mark::after{content:"";position:absolute;
+  left:5px;right:5px;height:2px;border-radius:1px;background:rgba(255,255,255,.92)}
+.brand-mark::before{top:8px}.brand-mark::after{top:15px}
+.brand-name{font-size:15px;font-weight:650;letter-spacing:.02em}
+.brand-name small{display:block;font-size:10.5px;font-weight:400;
+  letter-spacing:.14em;color:#9db8d2;margin-top:1px}
+nav.side{display:flex;flex-direction:column;gap:2px}
+nav.side a{display:flex;align-items:center;gap:10px;padding:9px 10px;
+  border-radius:9px;color:#c4d5e6;text-decoration:none;font-size:13.5px;
+  transition:background .15s,color .15s}
+nav.side a:hover{background:rgba(255,255,255,.07);color:#fff}
+nav.side a.on{background:rgba(255,255,255,.13);color:#fff;font-weight:600}
+nav.side svg{width:16px;height:16px;flex:none;opacity:.9}
+.side-foot{margin-top:auto;padding:0 10px;font-size:11px;color:#7d99b6;
+  line-height:1.7}
+.side-foot b{color:#a9c3dc;font-weight:600;font-family:var(--mono);font-size:10.5px}
+
+/* ── 主区 ─────────────────────────────────────────────── */
+main{padding:34px 40px 60px;max-width:1160px;width:100%;margin:0 auto}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:16px;margin:0 0 22px}
+h2{margin:0;font-size:19px;font-weight:650;letter-spacing:.01em}
+.page-head p{margin:4px 0 0;font-size:12.5px;color:var(--ink-faint)}
+.crumb{display:flex;gap:6px;align-items:center;margin:0 0 18px;
+  font-size:12.5px;color:var(--ink-faint)}
+.crumb a{color:var(--ink-soft);text-decoration:none}
+.crumb a:hover{color:var(--ink)}
+h3{margin:28px 0 12px;font-size:15px;font-weight:650}
+a{color:#1b6fc2}
+a:hover{color:#0f2b46}
+
+/* ── 卡片 / 表格 ──────────────────────────────────────── */
+.card{background:var(--card);border:1px solid var(--hairline);
+  border-radius:var(--radius);overflow:hidden;margin-bottom:22px}
+.card > table{margin:0}
+table{border-collapse:collapse;width:100%}
+th{font-size:12px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ink-faint);text-align:left;
+  padding:10px 16px;background:#fafbfc;border-bottom:1px solid var(--hairline)}
+td{padding:12px 16px;border-bottom:1px solid var(--hairline);
+  vertical-align:middle;font-size:13.5px}
+tbody tr:last-child td{border-bottom:none}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:#fafcfd}
+td .sub{display:block;font-size:11.5px;color:var(--ink-faint);margin-top:2px}
+.code{font-family:var(--mono);font-size:12.5px}
+.empty{padding:42px 20px;text-align:center;color:var(--ink-faint);font-size:13px}
+
+/* ── 徽章 / 状态点 ────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;
+  border-radius:999px;font-size:12px;font-weight:500;line-height:1.5}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;
+  background:currentColor;flex:none}
+.ok{background:var(--ok-bg);color:var(--ok)}
+.bad{background:var(--bad-bg);color:var(--bad)}
+.cool{background:var(--warn-bg);color:var(--warn)}
+
+/* ── 按钮 ─────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:7px 16px;border-radius:9px;border:1px solid var(--hairline);
+  background:var(--card);color:var(--ink);font-size:13px;font-weight:500;
+  font-family:var(--sans);cursor:pointer;text-decoration:none;
+  transition:border-color .15s,background .15s,transform .05s}
+.btn:hover{border-color:#c6d0da;background:#fafbfc}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn-primary:hover{background:#163a5f;border-color:#163a5f}
+.btn-danger{color:var(--bad)}
+.btn-danger:hover{border-color:#e5b6b2;background:var(--bad-bg)}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:7px}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* ── 表单 ─────────────────────────────────────────────── */
+form.stack{display:flex;flex-direction:column;gap:18px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12.5px;font-weight:600;color:var(--ink-soft)}
+.field .hint{font-size:11.5px;color:var(--ink-faint);font-weight:400}
+input,select,textarea{padding:8px 11px;border-radius:9px;border:1px solid #d3dae1;
+  background:#fff;color:var(--ink);font-size:13.5px;font-family:var(--sans);
+  width:100%;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#1b6fc2;
+  box-shadow:0 0 0 3px rgba(27,111,194,.13)}
+input::placeholder,textarea::placeholder{color:#a9b2bb}
+textarea{font-family:var(--mono);font-size:12.5px;line-height:1.8;resize:vertical}
+.check{display:flex;align-items:center;gap:8px;font-size:13px}
+.check input{width:auto}
+.check label{font-weight:400;color:var(--ink)}
+
+/* ── 工具行 / 内联表单 ────────────────────────────────── */
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  margin-bottom:18px}
+.toolbar input,.toolbar select{width:auto}
 form.inline{display:inline}
+.form-card{padding:26px 28px}
+.form-card form{max-width:560px}
+.form-actions{display:flex;gap:10px}
+
+/* ── 统计块（仪表盘） ─────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat{background:var(--card);border:1px solid var(--hairline);
+  border-radius:var(--radius);padding:16px 18px}
+.stat .k{font-size:12px;color:var(--ink-faint);letter-spacing:.03em}
+.stat .v{font-size:26px;font-weight:650;letter-spacing:-.01em;margin-top:2px;
+  font-variant-numeric:tabular-nums;line-height:1.3}
+.stat .v small{font-size:12.5px;font-weight:500;color:var(--ink-faint);margin-left:3px}
+.stat .v.ok-v{color:var(--ok)}
+.stat .v.bad-v{color:var(--bad)}
+.stat .v.warn-v{color:var(--warn)}
+
+/* ── 日志详情 ─────────────────────────────────────────── */
+.meta-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+  background:var(--card);border:1px solid var(--hairline);
+  border-radius:var(--radius);margin-bottom:22px;overflow:hidden}
+.meta-grid > div{padding:13px 18px;border-right:1px solid var(--hairline)}
+.meta-grid > div:nth-child(4n){border-right:none}
+.meta-grid > div:nth-child(n+5){border-top:1px solid var(--hairline)}
+.meta-grid dt{font-size:11.5px;color:var(--ink-faint)}
+.meta-grid dd{margin:2px 0 0;font-size:13.5px;font-weight:550}
+pre.raw{white-space:pre-wrap;word-break:break-all;margin:0;padding:14px 16px;
+  background:#f7f9fa;font-size:12px;font-family:var(--mono);color:var(--ink-soft)}
+.chip{display:inline-block;padding:1px 8px;border-radius:6px;
+  background:#f0f3f6;color:var(--ink-soft);font-size:11.5px;font-weight:500}
+
+/* ── 响应式 / 无障碍 ──────────────────────────────────── */
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr}
+  aside{position:static;height:auto;flex-direction:row;align-items:center;
+    padding:12px 16px;gap:18px}
+  .brand small,nav.side span,nav.side svg,.side-foot{display:none}
+  nav.side{flex-direction:row;margin-left:auto}
+  nav.side a{padding:7px 9px}
+  main{padding:22px 16px 50px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .meta-grid{grid-template-columns:repeat(2,1fr)}
+  .meta-grid > div{border-right:none}
+  .meta-grid > div:nth-child(2n){border-left:1px solid var(--hairline)}
+  .meta-grid > div:nth-child(n+3){border-top:1px solid var(--hairline)}
+}
+@media (max-width:560px){
+  .page-head{flex-direction:column;align-items:flex-start}
+}
+a:focus-visible,button:focus-visible,input:focus-visible,
+select:focus-visible,textarea:focus-visible{outline:2px solid #1b6fc2;
+  outline-offset:2px}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+.table-scroll{overflow-x:auto}
+.table-scroll table{min-width:640px}
 </style>
 </head>
 <body>
-<nav>
-<b>llm-apig</b>
-<a href="/admin">仪表盘</a>
-<a href="/admin/channels">渠道</a>
-<a href="/admin/groups">模型组</a>
-<a href="/admin/logs">日志</a>
-<a href="/admin/settings">设置</a>
-</nav>
-<hr>
+<div class="layout">
+<aside>
+  <a class="brand" href="/admin">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">llm-apig<small>API GATEWAY</small></span>
+  </a>
+  <nav class="side">
+    <a href="/admin" {% block nav_dash %}{% endblock %}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13a9 9 0 1 1 18 0"/><path d="M12 13l4-4"/><path d="M1 13h2M21 13h2"/></svg><span>仪表盘</span></a>
+    <a href="/admin/channels" {% block nav_channels %}{% endblock %}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1.6" fill="currentColor"/><circle cx="16" cy="12" r="1.6" fill="currentColor"/><circle cx="9" cy="18" r="1.6" fill="currentColor"/></svg><span>渠道</span></a>
+    <a href="/admin/groups" {% block nav_groups %}{% endblock %}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>模型组</span></a>
+    <a href="/admin/logs" {% block nav_logs %}{% endblock %}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v6h6"/><path d="M9 13h6M9 17h4"/></svg><span>日志</span></a>
+    <a href="/admin/settings" {% block nav_settings %}{% endblock %}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6A7 7 0 0 0 19 12z"/></svg><span>设置</span></a>
+  </nav>
+  <div class="side-foot">
+    <b>127.0.0.1:8317</b><br>本机网关 · <a href="/health" style="color:#7fb0dd">健康检查</a>
+  </div>
+</aside>
+<main>
 {% block content %}{% endblock %}
+</main>
+</div>
 </body>
 </html>

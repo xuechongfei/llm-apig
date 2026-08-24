@@ -1,32 +1,70 @@
 {% extends "base.html" %}
+{% block nav_dash %}class="on"{% endblock %}
 {% block content %}
-<h2>渠道状态</h2>
+<div class="page-head">
+  <div>
+    <h2>仪表盘</h2>
+    <p>渠道运行状态与最近请求</p>
+  </div>
+</div>
+
+{% set ok_n = channels | selectattr("enabled") | selectattr("last_error", "none") | list | length %}
+{% set ns = namespace(cool=0, off=0) %}
+{% for c in channels %}
+  {% if not c["enabled"] %}{% set ns.off = ns.off + 1 %}
+  {% elif c["cooldown_until"] > now %}{% set ns.cool = ns.cool + 1 %}{% endif %}
+{% endfor %}
+<div class="stats">
+  <div class="stat"><div class="k">渠道总数</div>
+    <div class="v">{{ channels | length }}</div></div>
+  <div class="stat"><div class="k">正常</div>
+    <div class="v ok-v">{{ channels | length - ns.cool - ns.off }}</div></div>
+  <div class="stat"><div class="k">冷却中</div>
+    <div class="v {{ 'warn-v' if ns.cool else '' }}">{{ ns.cool }}</div></div>
+  <div class="stat"><div class="k">已停用</div>
+    <div class="v {{ 'bad-v' if ns.off else '' }}">{{ ns.off }}</div></div>
+</div>
+
+<div class="card">
 <table>
-<tr><th>名称</th><th>协议</th><th>状态</th><th>最近错误</th></tr>
+<thead><tr><th>渠道</th><th>协议</th><th>状态</th><th>最近错误</th></tr></thead>
+<tbody>
 {% for c in channels %}
 <tr>
-<td>{{ c["name"] }}{{ "" if c["enabled"] else "（已停用）" }}</td>
-<td>{{ c["protocol"] }}</td>
+<td><b>{{ c["name"] }}</b>{% if not c["enabled"] %} <span class="chip">已停用</span>{% endif %}</td>
+<td><span class="chip">{{ c["protocol"] }}</span></td>
 <td>
 {% if not c["enabled"] %}<span class="badge bad">停用</span>
-{% elif c["cooldown_until"] > now %}<span class="badge cool">冷却中（剩余 {{ (c["cooldown_until"] - now) | int }}s）</span>
+{% elif c["cooldown_until"] > now %}<span class="badge cool">冷却中 · 剩余 {{ (c["cooldown_until"] - now) | int }}s</span>
 {% else %}<span class="badge ok">正常</span>{% endif %}
 </td>
-<td>{{ c["last_error"] or "" }}</td>
+<td class="code" style="color:var(--ink-faint)">{{ c["last_error"] or "—" }}</td>
 </tr>
+{% else %}
+<tr><td colspan="4" class="empty">还没有渠道。前往「渠道」页添加第一个接入点。</td></tr>
 {% endfor %}
+</tbody>
 </table>
-<h2>最近请求</h2>
+</div>
+
+<h3>最近请求</h3>
+<div class="card">
 <table>
-<tr><th>时间</th><th>协议</th><th>模型</th><th>状态</th><th>耗时</th><th></th></tr>
+<thead><tr><th>时间</th><th>协议</th><th>模型</th><th>状态</th><th>耗时</th><th></th></tr></thead>
+<tbody>
 {% for l in logs %}
 <tr>
-<td>{{ l["created_at"] | round(0) | int }}</td><td>{{ l["client_protocol"] }}</td>
+<td class="code">{{ l["created_at"] | ts }}</td>
+<td><span class="chip">{{ l["client_protocol"] }}</span></td>
 <td>{{ l["group_name"] }}</td>
-<td><span class="badge {{ 'ok' if l["status"]=='success' else 'bad' }}">{{ l["status"] }}</span></td>
-<td>{{ l["total_duration_ms"] }}ms</td>
+<td><span class="badge {{ 'ok' if l["status"]=='success' else 'bad' }}">{{ "成功" if l["status"]=="success" else "失败" }}</span></td>
+<td class="code">{{ l["total_duration_ms"] }}ms</td>
 <td><a href="/admin/logs/{{ l["id"] }}">详情</a></td>
 </tr>
+{% else %}
+<tr><td colspan="6" class="empty">暂无请求记录。</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 {% endblock %}

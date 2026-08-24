@@ -1,20 +1,42 @@
 {% extends "base.html" %}
+{% block nav_channels %}class="on"{% endblock %}
 {% block content %}
-<h2>{{ "编辑渠道" if ch else "新建渠道" }}</h2>
-<form method="post" style="max-width:480px"
+<div class="crumb"><a href="/admin/channels">渠道</a> / {{ "编辑" if ch else "新建" }}</div>
+<div class="page-head">
+  <div>
+    <h2>{{ "编辑渠道" if ch else "新建渠道" }}</h2>
+    <p>{{ "修改接入点信息" if ch else "添加一个云厂商 API 接入点" }}</p>
+  </div>
+</div>
+
+<div class="card form-card">
+<form class="stack" method="post"
  action="{{ '/admin/channels/' ~ ch['id'] ~ '/edit' if ch else '/admin/channels' }}">
-<label>名称</label>
-<input name="name" required value="{{ ch['name'] if ch else '' }}">
-<label>协议</label>
-<select name="protocol">
-<option value="anthropic" {{ "selected" if ch and ch["protocol"]=="anthropic" }}>anthropic</option>
-<option value="openai" {{ "selected" if ch and ch["protocol"]=="openai" }}>openai</option>
-</select>
-<label>Base URL</label>
-<input name="base_url" required placeholder="https://api.anthropic.com"
- value="{{ ch['base_url'] if ch else '' }}">
-<label>API Key{{ "（留空不修改）" if ch else "" }}</label>
-<input name="api_key" type="password" value="">
-<button>保存</button>
+  <div class="field">
+    <label>名称</label>
+    <input name="name" required placeholder="如：Anthropic 官方" value="{{ ch['name'] if ch else '' }}">
+  </div>
+  <div class="field">
+    <label>协议</label>
+    <select name="protocol">
+      <option value="anthropic" {{ "selected" if ch and ch["protocol"]=="anthropic" }}>anthropic</option>
+      <option value="openai" {{ "selected" if ch and ch["protocol"]=="openai" }}>openai</option>
+    </select>
+    <span class="hint">网关将按此协议与该渠道通信</span>
+  </div>
+  <div class="field">
+    <label>Base URL</label>
+    <input name="base_url" required placeholder="https://api.anthropic.com"
+     value="{{ ch['base_url'] if ch else '' }}">
+  </div>
+  <div class="field">
+    <label>API Key{% if ch %} <span class="hint">留空则不修改</span>{% endif %}</label>
+    <input name="api_key" type="password" value="" placeholder="sk-…">
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">保存</button>
+    <a class="btn" href="/admin/channels">取消</a>
+  </div>
 </form>
+</div>
 {% endblock %}

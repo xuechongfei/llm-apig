@@ -12,6 +12,17 @@ from app.logging_ import clear_cooldown
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(
     directory=str(Path(__file__).parent / "templates"))
+
+
+def ts_fmt(value):
+    """unix 秒 → 本地可读时间"""
+    try:
+        return time.strftime("%m-%d %H:%M:%S", time.localtime(float(value)))
+    except (TypeError, ValueError):
+        return value
+
+
+templates.env.filters["ts"] = ts_fmt
 _transport = None  # 测试注入点
 
 

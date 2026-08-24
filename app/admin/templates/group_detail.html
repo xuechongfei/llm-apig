@@ -1,37 +1,68 @@
 {% extends "base.html" %}
+{% block nav_groups %}class="on"{% endblock %}
 {% block content %}
-<h2>模型组：{{ group["name"] }}</h2>
+<div class="crumb"><a href="/admin/groups">模型组</a> / {{ group["name"] }}</div>
+<div class="page-head">
+  <div>
+    <h2 class="code">{{ group["name"] }}</h2>
+    <p>客户端请求该模型名时，按下列顺序尝试渠道</p>
+  </div>
+</div>
+
+<div class="card table-scroll">
 <table>
-<tr><th>渠道</th><th>协议</th><th>真实模型名</th><th>优先级</th>
-<th>图片</th><th>视频</th><th>操作</th></tr>
+<thead><tr><th>渠道</th><th>协议</th><th>真实模型名</th><th>优先级</th>
+<th>图片</th><th>视频</th><th>操作</th></tr></thead>
+<tbody>
 {% for m in mappings %}
 <tr>
-<td>{{ m["channel_name"] }}</td><td>{{ m["protocol"] }}</td>
-<td>{{ m["actual_model"] }}</td><td>{{ m["priority"] }}</td>
-<td>{{ "✓" if m["supports_image"] }}</td>
-<td>{{ "✓" if m["supports_video"] }}</td>
+<td><b>{{ m["channel_name"] }}</b></td>
+<td><span class="chip">{{ m["protocol"] }}</span></td>
+<td class="code">{{ m["actual_model"] }}</td>
+<td class="code">{{ m["priority"] }}</td>
+<td>{{ "✓" if m["supports_image"] else "—" }}</td>
+<td>{{ "✓" if m["supports_video"] else "—" }}</td>
 <td>
-<form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=up"><button>↑</button></form>
-<form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=down"><button>↓</button></form>
-<form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/delete"><button>删除</button></form>
+  <div style="display:flex;gap:6px">
+  <form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=up"><button class="btn btn-sm" title="上移">↑</button></form>
+  <form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=down"><button class="btn btn-sm" title="下移">↓</button></form>
+  <form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/delete"><button class="btn btn-sm btn-danger">删除</button></form>
+  </div>
 </td>
 </tr>
+{% else %}
+<tr><td colspan="7" class="empty">该组还没有渠道映射，在下方添加。</td></tr>
 {% endfor %}
+</tbody>
 </table>
-<h3>添加/更新映射</h3>
-<form method="post" action="/admin/groups/{{ group["id"] }}/mappings" style="max-width:480px">
-<label>渠道</label>
-<select name="channel_id">
-{% for c in channels %}
-<option value="{{ c["id"] }}">{{ c["name"] }}（{{ c["protocol"] }}）</option>
-{% endfor %}
-</select>
-<label>真实模型名</label>
-<input name="actual_model" required placeholder="如 claude-sonnet-4-5 / deepseek-chat">
-<label>优先级（越小越优先）</label>
-<input name="priority" type="number" value="100">
-<label><input type="checkbox" name="supports_image" style="width:auto"> 支持图片输入</label>
-<label><input type="checkbox" name="supports_video" style="width:auto"> 支持视频输入</label>
-<button>保存</button>
+</div>
+
+<h3>添加 / 更新映射</h3>
+<div class="card form-card">
+<form class="stack" method="post" action="/admin/groups/{{ group["id"] }}/mappings">
+  <div class="field">
+    <label>渠道</label>
+    <select name="channel_id">
+    {% for c in channels %}
+    <option value="{{ c["id"] }}">{{ c["name"] }}（{{ c["protocol"] }}）</option>
+    {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label>真实模型名</label>
+    <input name="actual_model" required class="code" placeholder="如 claude-sonnet-4-5 / deepseek-chat">
+  </div>
+  <div class="field">
+    <label>优先级 <span class="hint">越小越优先</span></label>
+    <input name="priority" type="number" value="100" style="max-width:140px">
+  </div>
+  <div style="display:flex;gap:22px">
+    <label class="check"><input type="checkbox" name="supports_image"> 支持图片输入</label>
+    <label class="check"><input type="checkbox" name="supports_video"> 支持视频输入</label>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">保存映射</button>
+  </div>
 </form>
+</div>
 {% endblock %}

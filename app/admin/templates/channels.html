@@ -1,34 +1,54 @@
 {% extends "base.html" %}
+{% block nav_channels %}class="on"{% endblock %}
 {% block content %}
-<h2>渠道 <a href="/admin/channels/new">+ 新建</a></h2>
+<div class="page-head">
+  <div>
+    <h2>渠道</h2>
+    <p>云厂商接入点：协议、地址与密钥</p>
+  </div>
+  <a class="btn btn-primary" href="/admin/channels/new">＋ 新建渠道</a>
+</div>
+
+<div class="card table-scroll">
 <table>
-<tr><th>ID</th><th>名称</th><th>协议</th><th>Base URL</th><th>密钥</th><th>操作</th></tr>
+<thead><tr><th>#</th><th>名称</th><th>协议</th><th>Base URL</th><th>密钥</th><th>操作</th></tr></thead>
+<tbody>
 {% for c in channels %}
 <tr>
-<td>{{ c["id"] }}</td><td>{{ c["name"] }}</td><td>{{ c["protocol"] }}</td>
-<td>{{ c["base_url"] }}</td>
-<td>{{ "******" if c["api_key"] else "（空）" }}</td>
+<td class="code" style="color:var(--ink-faint)">{{ c["id"] }}</td>
+<td><b>{{ c["name"] }}</b>{% if not c["enabled"] %} <span class="chip">已停用</span>{% endif %}</td>
+<td><span class="chip">{{ c["protocol"] }}</span></td>
+<td class="code">{{ c["base_url"] }}</td>
+<td class="code" style="color:var(--ink-faint)">{{ "••••••" if c["api_key"] else "（空）" }}</td>
 <td>
-<a href="/admin/channels/{{ c["id"] }}/edit">编辑</a>
-<form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/toggle">
-<button>{{ "停用" if c["enabled"] else "启用" }}</button></form>
-<form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/clear-cooldown">
-<button>清除冷却</button></form>
-<button onclick="testChannel({{ c["id"] }}, this)">测试</button>
-<form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/delete"
- onsubmit="return confirm('确认删除？')"><button>删除</button></form>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+  <a class="btn btn-sm" href="/admin/channels/{{ c["id"] }}/edit">编辑</a>
+  <form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/toggle">
+    <button class="btn btn-sm">{{ "停用" if c["enabled"] else "启用" }}</button></form>
+  <form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/clear-cooldown">
+    <button class="btn btn-sm">清除冷却</button></form>
+  <button class="btn btn-sm" onclick="testChannel({{ c["id"] }}, this)">测试</button>
+  <form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/delete"
+   onsubmit="return confirm('确认删除该渠道？')">
+    <button class="btn btn-sm btn-danger">删除</button></form>
+  </div>
 </td>
 </tr>
+{% else %}
+<tr><td colspan="6" class="empty">还没有渠道。点右上角「新建渠道」添加第一个接入点。</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
+
 <script>
 async function testChannel(id, btn){
-  btn.disabled = true; btn.textContent = "测试中…";
+  btn.disabled = true; const old = btn.textContent; btn.textContent = "测试中…";
   try{
     const r = await fetch(`/admin/channels/${id}/test`, {method:"POST"});
     const j = await r.json();
     alert((j.ok ? "✅ 连通正常\n" : "❌ 失败\n") + j.detail);
-  } finally { btn.disabled = false; btn.textContent = "测试"; }
+  } finally { btn.disabled = false; btn.textContent = old; }
 }
 </script>
 {% endblock %}

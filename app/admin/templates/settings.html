@@ -1,17 +1,61 @@
 {% extends "base.html" %}
+{% block nav_settings %}class="on"{% endblock %}
 {% block content %}
-<h2>设置</h2>
-<form method="post" style="max-width:560px">
-<label>余额不足冷却秒数</label><input name="cooldown_balance" value="{{ v['cooldown_balance'] or '600' }}">
-<label>限流冷却秒数</label><input name="cooldown_ratelimit" value="{{ v['cooldown_ratelimit'] or '60' }}">
-<label>鉴权失败冷却秒数</label><input name="cooldown_auth" value="{{ v['cooldown_auth'] or '1800' }}">
-<label>服务器错误冷却秒数</label><input name="cooldown_server" value="{{ v['cooldown_server'] or '60' }}">
-<label>网关访问令牌（留空则不校验；客户端用它作 api key）</label>
-<input name="api_key" value="{{ v['api_key'] }}">
-<label>余额不足特征（每行一条，小写匹配）</label>
-<textarea name="balance_patterns" rows="6" style="width:100%">{{ v["balance_patterns"] }}</textarea>
-<label>能力不支持特征（每行一条，小写匹配）</label>
-<textarea name="capability_patterns" rows="6" style="width:100%">{{ v["capability_patterns"] }}</textarea>
-<button>保存</button>
+<div class="page-head">
+  <div>
+    <h2>设置</h2>
+    <p>失败冷却、访问鉴权与错误特征库</p>
+  </div>
+</div>
+
+<form method="post">
+<div class="card form-card" style="margin-bottom:22px">
+  <h3 style="margin-top:0">冷却时间</h3>
+  <div class="stack" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="field">
+      <label>余额不足 <span class="hint">秒</span></label>
+      <input name="cooldown_balance" type="number" value="{{ v['cooldown_balance'] or '600' }}">
+    </div>
+    <div class="field">
+      <label>限流 <span class="hint">秒</span></label>
+      <input name="cooldown_ratelimit" type="number" value="{{ v['cooldown_ratelimit'] or '60' }}">
+    </div>
+    <div class="field">
+      <label>鉴权失败 <span class="hint">秒</span></label>
+      <input name="cooldown_auth" type="number" value="{{ v['cooldown_auth'] or '1800' }}">
+    </div>
+    <div class="field">
+      <label>服务器错误 <span class="hint">秒</span></label>
+      <input name="cooldown_server" type="number" value="{{ v['cooldown_server'] or '60' }}">
+    </div>
+  </div>
+</div>
+
+<div class="card form-card" style="margin-bottom:22px">
+  <h3 style="margin-top:0">访问鉴权</h3>
+  <div class="field">
+    <label>网关访问令牌</label>
+    <input name="api_key" value="{{ v['api_key'] }}" placeholder="留空则不校验">
+    <span class="hint">配置后，客户端以该令牌作为 api key 访问网关</span>
+  </div>
+</div>
+
+<div class="card form-card" style="margin-bottom:22px">
+  <h3 style="margin-top:0">错误特征库</h3>
+  <div class="field" style="margin-bottom:18px">
+    <label>余额不足特征</label>
+    <textarea name="balance_patterns" rows="6">{{ v["balance_patterns"] }}</textarea>
+    <span class="hint">每行一条，小写匹配响应内容</span>
+  </div>
+  <div class="field">
+    <label>能力不支持特征</label>
+    <textarea name="capability_patterns" rows="6">{{ v["capability_patterns"] }}</textarea>
+    <span class="hint">每行一条，小写匹配响应内容</span>
+  </div>
+</div>
+
+<div class="form-actions">
+  <button class="btn btn-primary" type="submit">保存设置</button>
+</div>
 </form>
 {% endblock %}

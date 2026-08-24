@@ -3,3 +3,6 @@ __pycache__/
 data/
 *.pyc
 .idea/
+dist/
+build/
+.playwright-mcp/

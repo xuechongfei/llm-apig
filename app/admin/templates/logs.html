@@ -1,28 +1,44 @@
 {% extends "base.html" %}
+{% block nav_logs %}class="on"{% endblock %}
 {% block content %}
-<h2>请求日志</h2>
-<form method="get">
-<input name="q" placeholder="模型名过滤" value="{{ q }}" style="width:200px">
-<select name="status" style="width:140px">
-<option value="">全部状态</option>
-<option value="success" {{ "selected" if status=="success" }}>success</option>
-<option value="failed" {{ "selected" if status=="failed" }}>failed</option>
-</select>
-<button>过滤</button>
+<div class="page-head">
+  <div>
+    <h2>请求日志</h2>
+    <p>最近 200 条网关请求</p>
+  </div>
+</div>
+
+<form method="get" class="toolbar">
+  <input name="q" placeholder="模型名过滤" value="{{ q }}">
+  <select name="status">
+    <option value="">全部状态</option>
+    <option value="success" {{ "selected" if status=="success" }}>成功</option>
+    <option value="failed" {{ "selected" if status=="failed" }}>失败</option>
+  </select>
+  <button class="btn" type="submit">筛选</button>
 </form>
+
+<div class="card table-scroll">
 <table>
-<tr><th>ID</th><th>时间</th><th>协议</th><th>模型</th><th>流式</th>
-<th>状态</th><th>耗时</th><th>tokens(in/out)</th><th></th></tr>
+<thead><tr><th>#</th><th>时间</th><th>协议</th><th>模型</th><th>流式</th>
+<th>状态</th><th>耗时</th><th>tokens (in / out)</th><th></th></tr></thead>
+<tbody>
 {% for l in logs %}
 <tr>
-<td>{{ l["id"] }}</td><td>{{ l["created_at"] | round(0) | int }}</td>
-<td>{{ l["client_protocol"] }}</td><td>{{ l["group_name"] }}</td>
-<td>{{ "是" if l["stream"] }}</td>
-<td><span class="badge {{ 'ok' if l["status"]=='success' else 'bad' }}">{{ l["status"] }}</span></td>
-<td>{{ l["total_duration_ms"] }}ms</td>
-<td>{{ l["input_tokens"] }}/{{ l["output_tokens"] }}</td>
+<td class="code" style="color:var(--ink-faint)">{{ l["id"] }}</td>
+<td class="code">{{ l["created_at"] | ts }}</td>
+<td><span class="chip">{{ l["client_protocol"] }}</span></td>
+<td>{{ l["group_name"] }}</td>
+<td>{{ "是" if l["stream"] else "—" }}</td>
+<td><span class="badge {{ 'ok' if l["status"]=='success' else 'bad' }}">{{ "成功" if l["status"]=="success" else "失败" }}</span></td>
+<td class="code">{{ l["total_duration_ms"] }}ms</td>
+<td class="code">{{ l["input_tokens"] }} / {{ l["output_tokens"] }}</td>
 <td><a href="/admin/logs/{{ l["id"] }}">详情</a></td>
 </tr>
+{% else %}
+<tr><td colspan="9" class="empty">没有匹配的请求记录。</td></tr>
 {% endfor %}
+</tbody>
 </table>
+</div>
 {% endblock %}
