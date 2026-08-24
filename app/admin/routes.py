@@ -158,3 +158,123 @@ async def channel_test(cid: int):
         return {"ok": False, "detail": f"网络错误: {e}"}
     ok = resp.status_code < 400
     return {"ok": ok, "detail": f"HTTP {resp.status_code}: {resp.text[:300]}"}
+
+
+@router.get("/groups", response_class=HTMLResponse)
+async def groups_page(request: Request):
+    conn = connect()
+    try:
+        groups = conn.execute(
+            "SELECT g.*, COUNT(m.id) AS n FROM model_group g"
+            " LEFT JOIN model_mapping m ON m.group_id=g.id"
+            " GROUP BY g.id ORDER BY g.id").fetchall()
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "groups.html",
+                                      {"groups": groups})
+
+
+@router.post("/groups")
+async def group_create(name: str = Form(...)):
+    conn = connect()
+    try:
+        conn.execute("INSERT OR IGNORE INTO model_group (name) VALUES (?)", (name,))
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse("/admin/groups", status_code=303)
+
+
+@router.post("/groups/{gid}/delete")
+async def group_delete(gid: int):
+    conn = connect()
+    try:
+        conn.execute("DELETE FROM model_group WHERE id=?", (gid,))
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse("/admin/groups", status_code=303)
+
+
+@router.get("/groups/{gid}", response_class=HTMLResponse)
+async def group_detail(request: Request, gid: int):
+    conn = connect()
+    try:
+        group = conn.execute("SELECT * FROM model_group WHERE id=?",
+                             (gid,)).fetchone()
+        mappings = conn.execute(
+            "SELECT m.*, c.name AS channel_name, c.protocol"
+            " FROM model_mapping m JOIN channel c ON c.id=m.channel_id"
+            " WHERE m.group_id=? ORDER BY m.priority", (gid,)).fetchall()
+        channels = conn.execute("SELECT * FROM channel ORDER BY id").fetchall()
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "group_detail.html", {
+        "group": group, "mappings": mappings,
+        "channels": channels})
+
+
+@router.post("/groups/{gid}/mappings")
+async def mapping_upsert(gid: int, channel_id: int = Form(...),
+                         actual_model: str = Form(...),
+                         priority: int = Form(100),
+                         supports_image: str | None = Form(None),
+                         supports_video: str | None = Form(None)):
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT INTO model_mapping (group_id,channel_id,actual_model,priority,"
+            "supports_image,supports_video) VALUES (?,?,?,?,?,?)"
+            " ON CONFLICT(group_id,channel_id) DO UPDATE SET"
+            " actual_model=excluded.actual_model, priority=excluded.priority,"
+            " supports_image=excluded.supports_image,"
+            " supports_video=excluded.supports_video",
+            (gid, channel_id, actual_model, priority,
+             1 if supports_image else 0, 1 if supports_video else 0))
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(f"/admin/groups/{gid}", status_code=303)
+
+
+@router.post("/mappings/{mid}/delete")
+async def mapping_delete(mid: int):
+    conn = connect()
+    try:
+        row = conn.execute("SELECT group_id FROM model_mapping WHERE id=?",
+                           (mid,)).fetchone()
+        conn.execute("DELETE FROM model_mapping WHERE id=?", (mid,))
+        conn.commit()
+    finally:
+        conn.close()
+    return RedirectResponse(f"/admin/groups/{row['group_id']}", status_code=303)
+
+
+@router.post("/mappings/{mid}/move")
+async def mapping_move(mid: int, dir: str = "up"):
+    conn = connect()
+    try:
+        cur = conn.execute("SELECT * FROM model_mapping WHERE id=?",
+                           (mid,)).fetchone()
+        op = "<" if dir == "up" else ">"
+        order = "DESC" if dir == "up" else "ASC"
+        neighbor = conn.execute(
+            f"SELECT * FROM model_mapping WHERE group_id=? AND priority {op} ?"
+            f" ORDER BY priority {order} LIMIT 1",
+            (cur["group_id"], cur["priority"])).fetchone()
+        if neighbor is None:  # 同优先级相邻的情况：按 id 找
+            neighbor = conn.execute(
+                f"SELECT * FROM model_mapping WHERE group_id=? AND priority=?"
+                f" AND id {'<' if dir == 'up' else '>'} ? ORDER BY id {order}"
+                " LIMIT 1",
+                (cur["group_id"], cur["priority"], mid)).fetchone()
+        if neighbor is not None:
+            conn.execute("UPDATE model_mapping SET priority=? WHERE id=?",
+                         (neighbor["priority"], mid))
+            conn.execute("UPDATE model_mapping SET priority=? WHERE id=?",
+                         (cur["priority"], neighbor["id"]))
+            conn.commit()
+        gid = cur["group_id"]
+    finally:
+        conn.close()
+    return RedirectResponse(f"/admin/groups/{gid}", status_code=303)

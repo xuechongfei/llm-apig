@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>模型组</h2>
+<form method="post" action="/admin/groups">
+<input name="name" required placeholder="统一模型名，如 claude-sonnet" style="width:300px">
+<button>新建</button>
+</form>
+<table>
+<tr><th>名称（客户端填写的模型名）</th><th>渠道数</th><th>操作</th></tr>
+{% for g in groups %}
+<tr>
+<td><a href="/admin/groups/{{ g["id"] }}">{{ g["name"] }}</a></td>
+<td>{{ g["n"] }}</td>
+<td>
+<form class="inline" method="post" action="/admin/groups/{{ g["id"] }}/delete"
+ onsubmit="return confirm('确认删除？')"><button>删除</button></form>
+</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>模型组：{{ group["name"] }}</h2>
+<table>
+<tr><th>渠道</th><th>协议</th><th>真实模型名</th><th>优先级</th>
+<th>图片</th><th>视频</th><th>操作</th></tr>
+{% for m in mappings %}
+<tr>
+<td>{{ m["channel_name"] }}</td><td>{{ m["protocol"] }}</td>
+<td>{{ m["actual_model"] }}</td><td>{{ m["priority"] }}</td>
+<td>{{ "✓" if m["supports_image"] }}</td>
+<td>{{ "✓" if m["supports_video"] }}</td>
+<td>
+<form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=up"><button>↑</button></form>
+<form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=down"><button>↓</button></form>
+<form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/delete"><button>删除</button></form>
+</td>
+</tr>
+{% endfor %}
+</table>
+<h3>添加/更新映射</h3>
+<form method="post" action="/admin/groups/{{ group["id"] }}/mappings" style="max-width:480px">
+<label>渠道</label>
+<select name="channel_id">
+{% for c in channels %}
+<option value="{{ c["id"] }}">{{ c["name"] }}（{{ c["protocol"] }}）</option>
+{% endfor %}
+</select>
+<label>真实模型名</label>
+<input name="actual_model" required placeholder="如 claude-sonnet-4-5 / deepseek-chat">
+<label>优先级（越小越优先）</label>
+<input name="priority" type="number" value="100">
+<label><input type="checkbox" name="supports_image" style="width:auto"> 支持图片输入</label>
+<label><input type="checkbox" name="supports_video" style="width:auto"> 支持视频输入</label>
+<button>保存</button>
+</form>
+{% endblock %}
