@@ -3,7 +3,8 @@
 日期：2026-08-24
 状态：已与用户逐节确认
 前置：取代 `2026-08-24-desktop-app-design.md` 的壳层方案（app/ 网关本体、数据目录、
-更新检查等决策不变）
+更新检查等基础决策不变；更新机制本身由 version.json 手动引导升级为
+Tauri updater 自动更新，见"更新"章节）
 
 ## 背景与目标
 
@@ -29,6 +30,7 @@
 - 托盘菜单严格对等现有：打开主界面 / 开机自启(勾选) / 检查更新 / 退出
 - Python 侧新写 daemon 入口，不动 app/main.py 开发路径
 - 冒烟自检保留并适配（含 Job Object 强杀验证）
+- 自动更新纳入范围（tauri-plugin-updater，jihulab 托管，用户触发+确认重启）
 
 ## 架构
 
@@ -109,10 +111,38 @@ token 机制：daemon 启动生成一次性 token 写 runtime.json，壳读后�
 Rust 后台线程 wait() 监控：异常退出 → 托盘 tooltip 提示 + 自动重启一次
 （简单退避）；二次失败停错误态，等用户手动处理。
 
-### 更新检查
+### 更新（Tauri updater 自动更新）
 
-服务端逻辑不变（/admin/api/update）。托盘"检查更新"：Rust ureq 调同一
-接口 + tauri-plugin-dialog 原生对话框展示结果（交互与现状一致）。
+交互模式：**用户触发 + 确认重启**（API 网关更新重启会断在途请求，不静默）。
+
+流程：
+
+```
+admin 页横幅 / 托盘"检查更新"
+  → 前端 invoke('check_update') → Rust tauri-plugin-updater check()
+  → 有新版: 横幅显示版本+说明, "立即更新"按钮
+  → 用户点击 → 下载(进度) → 完成后弹"重启以完成更新"
+  → 确认 → 安装 NSIS 包 + relaunch（Rust 处理, 壳先优雅停 daemon 再退）
+  → 全程失败则横幅回落"手动到 Release 页下载"链接
+```
+
+技术要点：
+
+- 插件：`tauri-plugin-updater` + `tauri-plugin-process`（relaunch）
+- 前端调用：admin 模板加一小段 JS，`window.__TAURI__` 全局模式
+  （withGlobalTauri: true，与 tether 同款），无需 npm 前端工程
+- 端点：jihulab.com Release 直链托管 `latest.json`（Tauri updater
+  schema：version/notes/pub_date/platforms.{url,signature}）；
+  latest.json 与 NSIS 安装包作为 Release 资产上传，发布即更新
+- 签名：本地 openssl 生成 **minisign 密钥对**（tauri signer generate）。
+  公钥内嵌 tauri.conf.json；私钥 `LLMAPIG_TAURI_PRIVATE_KEY` 环境变量
+  供构建用，**不入库**（丢失则已发版本无法再更新，需妥善备份）
+- 与旧机制的关系：**version.json 检查链路删除**
+  （app/update_check.py 的 get_update_info/version_gt 服务端部分、
+  /admin/api/update 端点、托盘 ureq 调用），版本号单一来源改 latest.json。
+  current_version() 保留（构建脚本用）
+- 注意：minisign 签名 ≠ 代码签名，SmartScreen 警告仍在（README 已说明，
+  不变）
 
 ## 错误处理
 
@@ -124,6 +154,7 @@ Rust 后台线程 wait() 监控：异常退出 → 托盘 tooltip 提示 + 自�
 | WebView2 缺失 | NSIS 安装包自带 WebView2 引导下载 |
 | 壳崩溃/强杀 | OS 销毁 Job → daemon 树清理；单实例锁由插件回收 |
 | 优雅停机失败 | 3s 超时 → kill 兜底 |
+| 更新检查/下载失败 | 横幅回落"手动到 Release 页下载"链接；托盘对话框提示重试 |
 | 重复拉起 | single-instance 插件挡第二壳实例；孤儿 daemon 由端口探测兜住 |
 
 ## 测试策略
@@ -145,17 +176,25 @@ Rust 后台线程 wait() 监控：异常退出 → 托盘 tooltip 提示 + 自�
 2. PyInstaller 打 llm-apig-daemon.exe（onefile、--console、无窗口依赖，
    剔除 pywebview/pystray/Pillow）
 3. 拷贝 daemon exe 到 src-tauri 资源位
-4. cargo tauri build（NSIS；WebView2 引导内置）
-5. version.json 更新（沿用）
-6. 冒烟自检（上述）
+4. cargo tauri build（NSIS；WebView2 引导内置；updater 签名走
+   LLMAPIG_TAURI_PRIVATE_KEY 环境变量，缺失则构建报错提示）
+5. 冒烟自检（上述）
 
-产物：`src-tauri/target/release/bundle/nsis/llm-apig-setup-<ver>.exe`。
-发布流程不变（传 jihulab Release + commit version.json）。
+产物：`src-tauri/target/release/bundle/nsis/llm-apig-setup-<ver>.exe` +
+`bundle/**/latest.json`（含签名）。
+
+发布（人工）：
+
+1. 上传 NSIS 安装包 + latest.json 到 jihulab Release（tag = 版本号）
+2. latest.json 里的 url 填同 Release 资产直链
+
+私钥备份：minisign 私钥仅存本地 + 安全备份，丢失则该公钥签的一切版本
+无法继续更新（只能出新安装包换公钥）。
 
 ## 明确不做（YAGNI）
 
-- 不做 Tauri 自动更新（仍 version.json + 手动下载引导）
 - 不做 MSI（NSIS 足够）
 - 不迁 admin 前端到 Tauri 前端工程（仍 FastAPI 模板渲染，devUrl 指过去）
 - 不加 tether 式托盘增强（daemon 状态菜单项、单击切换显隐）
 - 不做跨平台（仍仅 Windows）
+- 不做增量更新（NSIS 包整体下载，几十 MB 可接受）
