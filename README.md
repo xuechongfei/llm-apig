@@ -28,3 +28,28 @@
 ## 开发
 
 `uv run pytest tests/ -v`
+
+## 桌面版构建与分发（Windows）
+
+### 构建
+
+1. 安装依赖与 Inno Setup（一次性）：
+   `winget install -e --id JRSoftware.InnoSetup`
+2. 一键构建：`uv run python desktop/build.py`
+   （自动执行：测试 → PyInstaller → 安装包 → 冒烟自检，产物在 `dist/`）
+3. 发布前编辑 `version.json` 填写 `notes` 与 `url`（发布页地址），
+   把 setup.exe 上传到 GitLab Release，并提交 version.json
+
+### 最终用户安装说明（随安装包附带）
+
+1. 双击 `llm-apig-setup-x.x.x.exe` 安装
+2. 首次运行若出现蓝色「Windows 已保护你的电脑」提示：
+   点「更多信息」→「仍要运行」（无签名软件的正常提示）
+3. 关闭窗口后程序驻留系统托盘，网关继续服务；托盘右键可退出
+4. 客户端配置同上（地址 `http://127.0.0.1:8317`，若端口被占程序自动换用
+   8318-8321，实际端口见管理界面左下角）
+
+### 更新检查
+
+设置页「版本信息地址」填 version.json 直链（如 GitLab raw 地址）后，
+程序每小时后台检查一次，有新版在界面顶部横幅提示。
