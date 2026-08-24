@@ -4,6 +4,7 @@ import webbrowser
 import uvicorn
 from fastapi import FastAPI
 
+from app.admin.routes import router as admin_router
 from app.db import init_db
 from app.router_anthropic import router as anthropic_router
 from app.router_openai import router as openai_router
@@ -12,6 +13,7 @@ app = FastAPI(title="llm-apig")
 
 app.include_router(anthropic_router)
 app.include_router(openai_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

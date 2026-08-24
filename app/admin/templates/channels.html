@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>渠道 <a href="/admin/channels/new">+ 新建</a></h2>
+<table>
+<tr><th>ID</th><th>名称</th><th>协议</th><th>Base URL</th><th>密钥</th><th>操作</th></tr>
+{% for c in channels %}
+<tr>
+<td>{{ c["id"] }}</td><td>{{ c["name"] }}</td><td>{{ c["protocol"] }}</td>
+<td>{{ c["base_url"] }}</td>
+<td>{{ "******" if c["api_key"] else "（空）" }}</td>
+<td>
+<a href="/admin/channels/{{ c["id"] }}/edit">编辑</a>
+<form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/toggle">
+<button>{{ "停用" if c["enabled"] else "启用" }}</button></form>
+<form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/clear-cooldown">
+<button>清除冷却</button></form>
+<button onclick="testChannel({{ c["id"] }}, this)">测试</button>
+<form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/delete"
+ onsubmit="return confirm('确认删除？')"><button>删除</button></form>
+</td>
+</tr>
+{% endfor %}
+</table>
+<script>
+async function testChannel(id, btn){
+  btn.disabled = true; btn.textContent = "测试中…";
+  try{
+    const r = await fetch(`/admin/channels/${id}/test`, {method:"POST"});
+    const j = await r.json();
+    alert((j.ok ? "✅ 连通正常\n" : "❌ 失败\n") + j.detail);
+  } finally { btn.disabled = false; btn.textContent = "测试"; }
+}
+</script>
+{% endblock %}

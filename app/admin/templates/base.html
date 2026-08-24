@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>llm-apig</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:1100px;margin:0 auto;padding:16px;color:#222}
+nav a{margin-right:16px}
+table{border-collapse:collapse;width:100%;margin-top:12px}
+th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;font-size:14px}
+.badge{padding:2px 8px;border-radius:10px;font-size:12px}
+.ok{background:#d3f9d8}.bad{background:#ffe3e3}.cool{background:#fff3bf}
+button{cursor:pointer}input,select{padding:5px;margin:4px 0;width:100%;box-sizing:border-box}
+form.inline{display:inline}
+</style>
+</head>
+<body>
+<nav>
+<b>llm-apig</b>
+<a href="/admin">仪表盘</a>
+<a href="/admin/channels">渠道</a>
+<a href="/admin/groups">模型组</a>
+<a href="/admin/logs">日志</a>
+<a href="/admin/settings">设置</a>
+</nav>
+<hr>
+{% block content %}{% endblock %}
+</body>
+</html>

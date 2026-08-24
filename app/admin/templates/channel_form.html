@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>{{ "编辑渠道" if ch else "新建渠道" }}</h2>
+<form method="post" style="max-width:480px"
+ action="{{ '/admin/channels/' ~ ch['id'] ~ '/edit' if ch else '/admin/channels' }}">
+<label>名称</label>
+<input name="name" required value="{{ ch['name'] if ch else '' }}">
+<label>协议</label>
+<select name="protocol">
+<option value="anthropic" {{ "selected" if ch and ch["protocol"]=="anthropic" }}>anthropic</option>
+<option value="openai" {{ "selected" if ch and ch["protocol"]=="openai" }}>openai</option>
+</select>
+<label>Base URL</label>
+<input name="base_url" required placeholder="https://api.anthropic.com"
+ value="{{ ch['base_url'] if ch else '' }}">
+<label>API Key{{ "（留空不修改）" if ch else "" }}</label>
+<input name="api_key" type="password" value="">
+<button>保存</button>
+</form>
+{% endblock %}
