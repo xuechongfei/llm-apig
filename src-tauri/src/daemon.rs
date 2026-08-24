@@ -4,6 +4,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -11,6 +12,12 @@ use tauri::Manager;
 
 const HEALTH_TIMEOUT_S: u32 = 30;
 const HEALTH_POLL_MS: u64 = 300;
+
+/// 崩溃自动重启预算：壳进程生命周期内全局一次。首个成功 spawn 的
+/// watcher 经 swap 取走预算（得 true）；之后（重启链）新 spawn 的
+/// watcher 一律拿到 false —— daemon 再崩不再自动重启，防止无限重生。
+/// 若未来加入用户手动重启路径，可在手动重启成功后 store(true) 重置。
+static CRASH_RESTART_BUDGET: AtomicBool = AtomicBool::new(true);
 
 #[cfg(windows)]
 struct JobHandle(windows_sys::Win32::Foundation::HANDLE);
@@ -112,8 +119,14 @@ fn ensure_log_dir(dir: &std::path::Path) -> PathBuf {
     d
 }
 
+/// append 语义：跨代（崩溃重启）日志不互相截断，崩溃现场的日志能保留
+/// 给下一代 daemon 启动后排查。
 fn open_log(log_dir: &std::path::Path, name: &str) -> Option<fs::File> {
-    fs::File::create(log_dir.join(name)).ok()
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_dir.join(name))
+        .ok()
 }
 
 pub(crate) fn append_log(file: &Option<fs::File>, level: &str, msg: &str) {
@@ -124,8 +137,6 @@ pub(crate) fn append_log(file: &Option<fs::File>, level: &str, msg: &str) {
 }
 
 /// 便捷日志：没有 DaemonHandle（spawn 失败/托盘等）时写 desktop.log。
-/// 注意 open_log 是 truncate 语义 —— daemon 已就绪后调用会截断 desktop.log，
-/// 可接受（desktop.log 只是启动诊断用，daemon.log 才是运行日志）。
 pub(crate) fn log_to_desktop(msg: &str) {
     let dir = ensure_log_dir(&data_dir());
     let f = open_log(&dir, "desktop.log");
@@ -157,6 +168,7 @@ fn find_daemon_exe(dir: &std::path::Path, depth: u32) -> Option<PathBuf> {
 /// 0 正常、2 缺 LLMAPIG_DATA_DIR、3 端口绑定失败/uvicorn STARTUP_FAILURE）。
 fn exit_status_detail(status: &std::process::ExitStatus) -> String {
     match status.code() {
+        Some(0) => "daemon 正常退出(code 0)".to_string(),
         Some(2) => "daemon 意外退出: exit code 2（缺少 LLMAPIG_DATA_DIR 环境变量）"
             .to_string(),
         Some(3) => "daemon 意外退出: exit code 3（端口绑定失败，uvicorn STARTUP_FAILURE）"
@@ -346,17 +358,23 @@ impl DaemonHandle {
         }
 
         // 健康检查通过后从 runtime.json 读 shutdown token（文件为准）。
-        // pid 校验：文件必须是本子进程写的 —— 防止残留 runtime.json 冒充
-        // （健康检查命中的是别家进程 / 文件是上一次启动残留）。
+        // pid 校验只查存活，不强等 child.id()：venv python.exe 是 launcher，
+        // spawn 出的父进程 pid ≠ runtime.json 里真解释器的 pid；
+        // PyInstaller onefile 的 bootloader 父子进程同理（强等值会使
+        // 兜底路径必然启动失败）。残留文件由下面的 port 等值 +
+        // 健康检查端口独占（pick_free_port）兜底。
         let runtime = fs::read_to_string(data.join("runtime.json"))
             .map_err(|e| format!("读 runtime.json 失败: {}", e))?;
         let v: serde_json::Value = serde_json::from_str(&runtime)
             .map_err(|e| format!("解析 runtime.json 失败: {}", e))?;
-        let file_pid = v.get("pid").and_then(|p| p.as_u64()).unwrap_or(0);
-        if file_pid != child.id() as u64 {
+        let file_pid = match v.get("pid").and_then(|p| p.as_u64()) {
+            Some(p) if p > 0 && p <= u32::MAX as u64 => p as u32,
+            _ => return Err("runtime.json pid 缺失或不合法".to_string()),
+        };
+        if !pid_alive(file_pid) {
             return Err(format!(
-                "runtime.json pid 不符（文件 {}，子进程 {}）——疑似残留文件或健康检查命中旧 daemon",
-                file_pid, child.id()));
+                "runtime.json pid={} 已退出 ——疑似残留文件或健康检查命中旧 daemon",
+                file_pid));
         }
         let file_port = v.get("port").and_then(|p| p.as_u64()).unwrap_or(0);
         if file_port != port as u64 {
@@ -379,7 +397,11 @@ impl DaemonHandle {
             #[cfg(windows)]
             _job: job,
         };
-        spawn_crash_watcher(app.clone(), handle.child.id());
+        spawn_crash_watcher(
+            app.clone(),
+            handle.child.id(),
+            CRASH_RESTART_BUDGET.swap(false, Ordering::SeqCst),
+        );
         Ok(handle)
     }
 
@@ -414,6 +436,10 @@ impl DaemonHandle {
 /// 崩溃监控：daemon 异常退出 → 重启一次；再挂则停（由用户手动处理）。
 /// 在 DaemonHandle::spawn() 末尾、返回 handle 前调用。
 ///
+/// `restart_budget`：本 watcher 是否还持有"重启一次"的预算。首代（壳初次
+/// 拉起）为 true；崩溃重启链产生的新代由 spawn() 递归装新 watcher 并传
+/// false —— 即使重启出来的实例再崩，也不再自动重启，防止无限重生。
+///
 /// 注意注册窗口期：watcher 在 spawn() 返回前启动，而调用方（lib.rs 初次
 /// 接线 / 本函数的重启路径）要在 spawn() 返回后才把 handle 存进 state ——
 /// 期间 state.daemon 为 None。若把 None 一律当"已退出"会误退役 watcher
@@ -422,6 +448,7 @@ impl DaemonHandle {
 fn spawn_crash_watcher(
     handle: tauri::AppHandle,
     child_id: u32,
+    restart_budget: bool,
 ) {
     std::thread::spawn(move || {
         let register_deadline =
@@ -429,24 +456,53 @@ fn spawn_crash_watcher(
         let mut matched = false;
         loop {
             let state = handle.state::<crate::AppState>();
-            let mut guard = state.daemon.lock().unwrap();
+            let mut guard = match state.daemon.lock() {
+                Ok(g) => g,
+                Err(_) => {
+                    log_to_desktop("AppState 锁中毒，崩溃监控退役");
+                    return;
+                }
+            };
             if let Some(dh) = guard.as_mut() {
                 if dh.child_id() != child_id {
                     return; // handle 已被替换（重启过/退出流程），本 watcher 退役
                 }
                 matched = true; // 已注册，进入监控
-                match dh.try_wait() {
+                let waited = dh.try_wait();
+                match waited {
+                    Ok(Some(status)) if status.code() == Some(0) => {
+                        // 正常退出（如 POST /shutdown）：不重启，只退役监控
+                        log_to_desktop("daemon 正常退出(code 0)，不再监控");
+                        return;
+                    }
                     Ok(Some(status)) => {
-                        drop(guard);
+                        if !restart_budget {
+                            log_to_desktop(&format!(
+                                "daemon 再次崩溃({})，重启预算已用尽，停止自动重启",
+                                exit_status_detail(&status)));
+                            return;
+                        }
                         log_to_desktop(&format!(
                             "daemon 崩溃({})，自动重启一次", exit_status_detail(&status)));
                         // take 出旧 handle（Drop 会 kill——进程已死，无害）
-                        let old = state.daemon.lock().unwrap().take();
+                        let old = guard.take();
                         drop(old);
+                        drop(guard);
+                        // spawn 给新代递归装新 watcher（预算 false）；
+                        // 新 handle 落 state 后老 watcher 已 return。
                         match DaemonHandle::spawn(&handle) {
                             Ok(dh) => {
                                 let new_port = dh.port();
-                                *state.daemon.lock().unwrap() = Some(dh);
+                                match state.daemon.lock() {
+                                    Ok(mut g) => *g = Some(dh),
+                                    Err(_) => {
+                                        // 锁中毒：dh 被 Drop（停掉新 daemon），
+                                        // 新 watcher 30s 注册窗口超时后自行退役
+                                        log_to_desktop(
+                                            "AppState 锁中毒，新 daemon 已停止，监控退役");
+                                        return;
+                                    }
+                                }
                                 if let Some(w) = handle.get_webview_window("main") {
                                     let _ = w.eval(&format!(
                                         "window.location.replace('http://127.0.0.1:{}/admin')",
@@ -455,7 +511,7 @@ fn spawn_crash_watcher(
                             }
                             Err(e) => log_to_desktop(&format!("重启失败: {}", e)),
                         }
-                        return; // 只重启一次，新实例由新监控线程负责（spawn 递归装新 watcher）
+                        return; // 本 watcher 职责结束，新实例由新 watcher 负责
                     }
                     Ok(None) => {} // 还活着
                     Err(_) => return,
