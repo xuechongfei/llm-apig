@@ -209,12 +209,31 @@ select:focus-visible,textarea:focus-visible{outline:2px solid #1b6fc2;
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6A7 7 0 0 0 19 12z"/></svg><span>设置</span></a>
   </nav>
   <div class="side-foot">
-    <b>127.0.0.1:8317</b><br>本机网关 · <a href="/health" style="color:#7fb0dd">健康检查</a>
+    <b>127.0.0.1:{{ request.url.port or 80 }}</b><br>本机网关 · <a href="/health" style="color:#7fb0dd">健康检查</a>
   </div>
 </aside>
 <main>
+<div id="upd-banner" hidden
+     style="display:flex;align-items:center;gap:10px;margin:0 0 18px;padding:10px 16px;
+            background:var(--warn-bg);color:var(--warn);border-radius:var(--radius);
+            font-size:13px">
+  <span id="upd-text"></span>
+  <a id="upd-link" href="#" style="flex:none">查看下载</a>
+</div>
 {% block content %}{% endblock %}
 </main>
 </div>
+<script>
+(function(){
+  fetch('/admin/api/update').then(function(r){return r.json()}).then(function(d){
+    if(!d.update) return;
+    document.getElementById('upd-text').textContent =
+      '新版本 ' + d.update.latest + ' 可用' + (d.update.notes ? '：' + d.update.notes : '');
+    var a = document.getElementById('upd-link');
+    if(d.update.url){ a.href = d.update.url; a.target = '_blank'; } else { a.remove(); }
+    document.getElementById('upd-banner').hidden = false;
+  }).catch(function(){});
+})();
+</script>
 </body>
 </html>

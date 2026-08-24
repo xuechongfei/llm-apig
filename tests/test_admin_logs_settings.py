@@ -1,6 +1,7 @@
 import httpx
 
 import app.db as db
+import app.update_check as uc
 from app.errors import ErrorCategory, classify_error
 from app.main import app
 
@@ -53,3 +54,30 @@ async def test_settings_page(tmp_path, monkeypatch):
         assert db.get_setting(conn, "cooldown_balance", "") == "300"
         assert "quota" in db.get_setting(conn, "balance_patterns", "")
         conn.close()
+
+
+async def test_update_api_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    db.init_db()
+    uc._cache.clear()
+    conn = db.connect()
+    db.set_setting(conn, "update_url", "")
+    conn.close()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://t") as c:
+        r = await c.get("/admin/api/update")
+    assert r.status_code == 200
+    assert r.json() == {"update": None}
+
+
+async def test_settings_page_shows_update_url(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    db.init_db()
+    conn = db.connect()
+    db.set_setting(conn, "update_url", "http://jihulab/x/version.json")
+    conn.close()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://t") as c:
+        r = await c.get("/admin/settings")
+    assert r.status_code == 200
+    assert "http://jihulab/x/version.json" in r.text

@@ -41,6 +41,16 @@
 </div>
 
 <div class="card form-card" style="margin-bottom:22px">
+  <h3 style="margin-top:0">更新检查</h3>
+  <div class="field">
+    <label>版本信息地址</label>
+    <input name="update_url" value="{{ v['update_url'] }}"
+           placeholder="留空则不检查更新">
+    <span class="hint">填 version.json 的直链（如 GitLab raw 地址），启动时后台检查，有新版会在界面顶部提示</span>
+  </div>
+</div>
+
+<div class="card form-card" style="margin-bottom:22px">
   <h3 style="margin-top:0">错误特征库</h3>
   <div class="field" style="margin-bottom:18px">
     <label>余额不足特征</label>
