@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>llm-apig</title>
+<style>
+  body { margin: 0; height: 100vh; display: flex; align-items: center;
+         justify-content: center; font-family: "Microsoft YaHei", sans-serif;
+         background: #0f2b46; color: #fff; }
+  .box { text-align: center; }
+  .spin { width: 36px; height: 36px; margin: 0 auto 18px;
+          border: 4px solid rgba(255,255,255,.2);
+          border-top-color: #7fb0dd; border-radius: 50%;
+          animation: r 1s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  #err { display: none; max-width: 640px; text-align: left;
+         background: #5b1f1f; border-radius: 8px; padding: 16px 20px;
+         white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="spin" id="spin"></div>
+  <div id="msg">正在启动 llm-apig 网关…</div>
+  <div id="err"></div>
+</div>
+<script>
+// 壳在 daemon 启动失败时 eval 调用此函数（Task 3）
+window.__shellError = function (title, detail) {
+  document.getElementById('spin').style.display = 'none';
+  document.getElementById('msg').textContent = title;
+  var e = document.getElementById('err');
+  e.style.display = 'block';
+  e.textContent = detail;
+};
+</script>
+</body>
+</html>

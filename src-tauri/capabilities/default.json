@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "windows": ["main"],
+  "remote": { "urls": ["http://127.0.0.1:*", "http://localhost:*"] },
+  "permissions": [
+    "core:default",
+    "updater:default",
+    "core:event:default",
+    "core:webview:default",
+    "core:window:default"
+  ]
+}
