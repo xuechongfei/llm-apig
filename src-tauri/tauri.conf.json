@@ -20,8 +20,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "resources": ["resources/llm-apig-daemon.exe"],
+    "targets": [
+      "nsis"
+    ],
+    "createUpdaterArtifacts": "v1Compatible",
+    "resources": [
+      "resources/llm-apig-daemon.exe"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -29,10 +34,14 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["SimpChinese"]
+        "languages": [
+          "SimpChinese"
+        ]
       }
     }
   },
