@@ -29,27 +29,36 @@
 
 `uv run pytest tests/ -v`
 
-## 桌面版构建与分发（Windows）
+## 桌面版构建与分发（Windows / Tauri 壳）
 
 ### 构建
 
-1. 安装依赖与 Inno Setup（一次性）：
-   `winget install -e --id JRSoftware.InnoSetup`
-2. 一键构建：`uv run python desktop/build.py`
-   （自动执行：测试 → PyInstaller → 安装包 → 冒烟自检，产物在 `dist/`）
-3. 发布前编辑 `version.json` 填写 `notes` 与 `url`（发布页地址），
-   把 setup.exe 上传到 GitLab Release，并提交 version.json
+1. 安装 Rust（[rustup.rs](https://rustup.rs)）与 Tauri CLI：
+   `cargo install tauri-cli --version "^2" --locked`
+2. 生成 minisign 密钥对（一次性）：
+   `cd src-tauri && cargo tauri signer generate -w .tauri/llm-apig.key`（密码留空）
+3. 设置签名环境变量（或把 `.tauri/llm-apig.key` 文件内容设为环境变量
+   `TAURI_SIGNING_PRIVATE_KEY`）：
+   `set TAURI_SIGNING_PRIVATE_KEY=<私钥文件内容>`
+4. 一键构建：`uv run python desktop/build.py`
+   （自动执行：测试 → PyInstaller daemon → tauri build → NSIS 安装包 → 冒烟自检，
+   产物 `dist/llm-apig-setup-<ver>.exe` + `latest.json`）
+5. 发布：上传 NSIS 安装包 + latest.json 到 GitHub Release
+   （tag = 版本号，仓库 xuechongfei/llm-apig），Tauri updater 自动更新即生效
 
-### 最终用户安装说明（随安装包附带）
+### 桌面开发
 
-1. 双击 `llm-apig-setup-x.x.x.exe` 安装
+双击 `start-desktop-dev.bat`（先起 Python 网关，再起 Tauri 壳 devUrl 指向它）。
+
+### 最终用户安装说明
+
+1. 双击 `llm-apig-setup-x.x.x.exe` 安装（安装路径 `%LOCALAPPDATA%\Programs\llm-apig`）
 2. 首次运行若出现蓝色「Windows 已保护你的电脑」提示：
    点「更多信息」→「仍要运行」（无签名软件的正常提示）
 3. 关闭窗口后程序驻留系统托盘，网关继续服务；托盘右键可退出
-4. 客户端配置同上（地址 `http://127.0.0.1:8317`，若端口被占程序自动换用
-   8318-8321，实际端口见管理界面左下角）
+4. 客户端配置同「使用」章节（地址 `http://127.0.0.1:8317`，若端口被占程序自动换用）
 
 ### 更新检查
 
-设置页「版本信息地址」填 version.json 直链（如 GitLab raw 地址）后，
-程序每小时后台检查一次，有新版在界面顶部横幅提示。
+Tauri updater 自动检查 GitHub Release 上的 latest.json，有新版在界面顶部横幅提示
+「立即更新」→ 下载 → 重启安装。检查失败则回落手动到 Release 页下载。

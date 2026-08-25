@@ -8,8 +8,6 @@ from fastapi.templating import Jinja2Templates
 
 from app.db import connect
 from app.logging_ import clear_cooldown
-import app.update_check as update_check
-from app.update_check import get_update_info
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(
@@ -328,7 +326,7 @@ async def log_detail(request: Request, log_id: int):
 
 _SETTING_KEYS = ["cooldown_balance", "cooldown_ratelimit", "cooldown_auth",
                  "cooldown_server", "api_key", "balance_patterns",
-                 "capability_patterns", "update_url"]
+                 "capability_patterns"]
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -357,10 +355,6 @@ async def settings_save(request: Request):
             set_setting(conn, k, str(form.get(k, "")))
     finally:
         conn.close()
-    update_check._cache.clear()  # 设置变更后立即重新检查更新
     return RedirectResponse("/admin/settings", status_code=303)
 
 
-@router.get("/api/update")
-async def update_api(fresh: str = ""):
-    return await get_update_info(force=fresh == "1")
