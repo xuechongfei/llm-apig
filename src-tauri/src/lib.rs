@@ -1,5 +1,6 @@
 mod daemon;
 mod tray;
+mod updater_cmds;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -22,6 +23,7 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState { daemon: Mutex::new(None) })
         .setup(|app| {
             // 托盘 + 关窗隐藏不依赖 daemon，dev/打包两种形态都注册
@@ -75,6 +77,11 @@ pub fn run() {
             });
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            updater_cmds::check_update,
+            updater_cmds::install_update,
+            updater_cmds::restart_app,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running llm-apig");
 }

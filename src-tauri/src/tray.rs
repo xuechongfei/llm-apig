@@ -3,16 +3,16 @@
 use tauri::{
     menu::{CheckMenuItem, MenuBuilder, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime,
+    AppHandle, Manager,
 };
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::daemon;
 
-pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
-    let show: MenuItem<R> = MenuItem::with_id(app, "show", "打开主界面", true, None::<&str>)?;
-    let autostart: CheckMenuItem<R> = CheckMenuItem::with_id(
+pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let show: MenuItem<_> = MenuItem::with_id(app, "show", "打开主界面", true, None::<&str>)?;
+    let autostart: CheckMenuItem<_> = CheckMenuItem::with_id(
         app,
         "autostart",
         "开机自启",
@@ -20,10 +20,10 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::err
         app.autolaunch().is_enabled().unwrap_or(false),
         None::<&str>,
     )?;
-    let check_update: MenuItem<R> =
+    let check_update: MenuItem<_> =
         MenuItem::with_id(app, "check_update", "检查更新", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit: MenuItem<R> = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let quit: MenuItem<_> = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
     let menu = MenuBuilder::new(app)
         .item(&show)
@@ -67,9 +67,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::err
                 }
             }
             "check_update" => {
-                // Task 5 Step 3 会把这里替换为 updater_cmds::tray_check_update(app);
-                // 本任务先最小实现：打开主窗口（横幅在页内显示更新状态）
-                show_main(app);
+                crate::updater_cmds::tray_check_update(app);
             }
             "quit" => {
                 let state = app.state::<crate::AppState>();
@@ -115,7 +113,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::err
     Ok(())
 }
 
-fn show_main<R: Runtime>(app: &AppHandle<R>) {
+fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
