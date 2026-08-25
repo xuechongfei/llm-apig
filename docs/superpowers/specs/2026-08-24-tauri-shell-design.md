@@ -30,7 +30,10 @@ Tauri updater 自动更新，见"更新"章节）
 - 托盘菜单严格对等现有：打开主界面 / 开机自启(勾选) / 检查更新 / 退出
 - Python 侧新写 daemon 入口，不动 app/main.py 开发路径
 - 冒烟自检保留并适配（含 Job Object 强杀验证）
-- 自动更新纳入范围（tauri-plugin-updater，jihulab 托管，用户触发+确认重启）
+- 自动更新纳入范围（tauri-plugin-updater，GitHub Releases 托管，用户触发+确认重启。
+  选型过程：jihulab 收费被否；Gitee 无 latest 永久直链且附件匿名下载政策未验证；
+  GitHub 机制最简（releases/latest/download 永久直链），已知代价是国内直连
+  github.com 可能不稳定，用户知情接受，updater 多 endpoints 数组留后续加国内源的可能）
 
 ## 架构
 
@@ -131,9 +134,12 @@ admin 页横幅 / 托盘"检查更新"
 - 插件：`tauri-plugin-updater` + `tauri-plugin-process`（relaunch）
 - 前端调用：admin 模板加一小段 JS，`window.__TAURI__` 全局模式
   （withGlobalTauri: true，与 tether 同款），无需 npm 前端工程
-- 端点：jihulab.com Release 直链托管 `latest.json`（Tauri updater
-  schema：version/notes/pub_date/platforms.{url,signature}）；
-  latest.json 与 NSIS 安装包作为 Release 资产上传，发布即更新
+- 端点：GitHub Releases 托管 `latest.json`（Tauri updater
+  schema：version/notes/pub_date/platforms.{url,signature}）。
+  GitHub 的"最新 Release 资产永久直链"格式
+  `https://github.com/xuechongfei/llm-apig/releases/latest/download/latest.json`
+  一次配置永久有效；latest.json 与 NSIS 安装包作为 Release 资产上传
+  （tag = 版本号），发布即更新
 - 签名：本地 openssl 生成 **minisign 密钥对**（tauri signer generate）。
   公钥内嵌 tauri.conf.json；私钥 `LLMAPIG_TAURI_PRIVATE_KEY` 环境变量
   供构建用，**不入库**（丢失则已发版本无法再更新，需妥善备份）
@@ -185,8 +191,10 @@ admin 页横幅 / 托盘"检查更新"
 
 发布（人工）：
 
-1. 上传 NSIS 安装包 + latest.json 到 jihulab Release（tag = 版本号）
+1. 上传 NSIS 安装包 + latest.json 到 GitHub Release（tag = 版本号，
+   仓库 xuechongfei/llm-apig）
 2. latest.json 里的 url 填同 Release 资产直链
+   （`https://github.com/xuechongfei/llm-apig/releases/download/<tag>/llm-apig-setup-<ver>.exe`）
 
 私钥备份：minisign 私钥仅存本地 + 安全备份，丢失则该公钥签的一切版本
 无法继续更新（只能出新安装包换公钥）。

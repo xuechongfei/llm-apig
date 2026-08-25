@@ -1184,28 +1184,27 @@ Expected: 输出公钥（一段 base64）并写出 `.tauri/llm-apig.key`（私�
 
 - [ ] **Step 2: tauri.conf.json 加 updater 配置**
 
-先取仓库远端：Run: `git remote -v` → 取 jihulab.com 上的 `<owner>/<repo>`（下同）。
+仓库定为 GitHub `xuechongfei/llm-apig`（2026-08-25 用户确认，弃 jihulab/Gitee/GitCode）。
 
-在 tauri.conf.json 顶层加（`<PUBKEY>` 替换为 Step 1 输出的公钥字符串；`<owner>/<repo>` 替换为远端路径）：
+在 tauri.conf.json 顶层加（`<PUBKEY>` 替换为 Step 1 输出的公钥字符串）：
 
 ```json
   "plugins": {
     "updater": {
       "pubkey": "<PUBKEY>",
       "endpoints": [
-        "https://jihulab.com/<owner>/<repo>/-/releases/permalink/latest/assets/1/latest.json"
+        "https://github.com/xuechongfei/llm-apig/releases/latest/download/latest.json"
       ]
     }
   }
 ```
 
-endpoint URL 说明：GitLab 系（jihulab 同源码）Release 资产直链格式为
-`https://jihulab.com/<owner>/<repo>/-/releases/permalink/latest/assets/<asset-id>/<filename>`，
-其中 `<asset-id>` 是上传 latest.json 后 Release 页面里该资产的数字 id
-（permalink/latest 固定指最新 Release，发布新版本无需改壳内配置）。
-**首次发版前拿不到 asset id**——先用占位 id 构建，发完首个 Release 后把
-真实 id 填进 tauri.conf.json 再出正式版（一次性操作）。若 jihulab 的
-资产直链格式与之不符，以 Release 页面"复制资产链接"按钮给出的格式为准。
+endpoint URL 说明：GitHub 的“最新 Release 资产永久直链”格式为
+`https://github.com/<owner>/<repo>/releases/latest/download/<filename>`，
+固定指向最新 Release 的同名资产，一次配置永久有效，无需任何回填；
+发布新版本只需新建 Release（tag = 版本号）并上传 latest.json 与安装包。
+国内访问 github.com 可能不稳定的已知代价由用户知情接受；tauri updater 的
+endpoints 是数组，将来可加国内源兜底（一行配置，不影响本任务）。
 
 - [ ] **Step 3: updater_cmds.rs + lib.rs 注册**
 
@@ -1325,7 +1324,7 @@ lib.rs 修改：
 
 - [ ] **Step 4: admin 横幅 JS 改造（base.html）**
 
-`<script>` 块整体替换为（`<owner>/<repo>` 同 Step 2 取值；RELEASES_PAGE 用发布页地址 `https://jihulab.com/<owner>/<repo>/-/releases`）：
+`<script>` 块整体替换为（RELEASES_PAGE 用发布页地址 `https://github.com/xuechongfei/llm-apig/releases`）：
 
 ```html
 <script>
@@ -1334,7 +1333,7 @@ lib.rs 修改：
   var T = window.__TAURI__;
   if (!T || !T.core) return;
   var invoke = T.core.invoke;
-  var RELEASES_PAGE = 'https://jihulab.com/<owner>/<repo>/-/releases';
+  var RELEASES_PAGE = 'https://github.com/xuechongfei/llm-apig/releases';
   var banner = document.getElementById('upd-banner');
   var text = document.getElementById('upd-text');
   var link = document.getElementById('upd-link');
@@ -1696,7 +1695,7 @@ Expected: 全部 PASS。
 
 `README.md` 构建章节替换要点（沿用现有文风）：
 - 构建：`set TAURI_PRIVATE_KEY=...` + `uv run python desktop/build.py`，产物 `dist/llm-apig-setup-<ver>.exe`
-- 发布：NSIS 包与 bundle 里的 `latest.json` 一并上传 jihulab Release（tag=版本号）；latest.json 内 url 已指向同 Release 资产
+- 发布：NSIS 包与 bundle 里的 `latest.json` 一并上传 GitHub Release（tag=版本号）；latest.json 内 url 填同 Release 的安装包资产直链
 - 私钥：`.tauri/llm-apig.key` 不入库，丢失=自动更新永久失效（需换公钥重发）
 - 桌面开发：`start-desktop-dev.bat`（先起 uvicorn 再起壳）；从旧版升级需先卸载旧 Inno 安装（目录相同的可不卸，覆盖即可）
 
