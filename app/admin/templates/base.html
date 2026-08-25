@@ -233,30 +233,44 @@ select:focus-visible,textarea:focus-visible{outline:2px solid #1b6fc2;
   var banner = document.getElementById('upd-banner');
   var text = document.getElementById('upd-text');
   var link = document.getElementById('upd-link');
-  function show(version, notes, action){
+  // 失败回落：转手动下载（return false 防 href="#" 导航）
+  function fallback(msg){
+    text.textContent = msg;
+    link.textContent = '手动下载';
+    link.onclick = function(){
+      location.href = RELEASES_PAGE;
+      return false;
+    };
+  }
+  function show(version, notes){
     text.textContent = '新版本 ' + version + ' 可用' +
       (notes ? '：' + notes : '');
-    link.textContent = action;
+    link.textContent = '立即更新';
     link.onclick = function(){
       link.textContent = '正在下载…';
       link.onclick = null;
-      invoke('install_update').then(function(){
+      invoke('download_update').then(function(u){
+        if (!u){ banner.style.display = 'none'; return; }  // 检查后已无新版：静默收起
         text.textContent = '下载完成，重启后生效';
         link.textContent = '重启并安装';
         link.onclick = function(){
-          invoke('restart_app');  // 用户已点更新，重启即预期，不再二次确认
+          link.textContent = '正在重启…';
+          link.onclick = null;
+          // install_update 成功路径进程直接退出（NSIS /R 装完自动重启应用），
+          // 无需 then；仅失败路径会走到 catch
+          invoke('install_update').catch(function(e){
+            fallback('安装失败：' + e);
+          });
         };
       }).catch(function(e){
-        text.textContent = '更新失败：' + e;
-        link.textContent = '手动下载';
-        link.onclick = function(){ location.href = RELEASES_PAGE; };
+        fallback('下载失败：' + e);
       });
       return false;
     };
     banner.style.display = 'flex';
   }
   invoke('check_update').then(function(u){
-    if (u) show(u.version, u.notes, '立即更新');
+    if (u) show(u.version, u.notes);
   }).catch(function(){});
 })();
 </script>

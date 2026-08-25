@@ -7,6 +7,9 @@
     "updater:default",
     "core:event:default",
     "core:webview:default",
-    "core:window:default"
+    "core:window:default",
+    "allow-check-update",
+    "allow-download-update",
+    "allow-install-update"
   ]
 }
