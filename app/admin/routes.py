@@ -366,9 +366,11 @@ async def settings_save(request: Request):
 async def settings_data_dir(request: Request):
     import os
     import shutil
+    import sqlite3
     from pathlib import Path
 
     from desktop.config import set_data_dir
+    from desktop.paths import data_dir
 
     form = await request.form()
     new_dir = form.get("data_dir", "").strip()
@@ -377,8 +379,7 @@ async def settings_data_dir(request: Request):
         return JSONResponse({"ok": False, "detail": "路径不能为空"}, 400)
 
     new_path = Path(new_dir).resolve()
-    old_path = Path(os.environ.get("LLMAPIG_DATA_DIR", "") or
-                    str(Path(os.environ["APPDATA"]) / "llm-apig"))
+    old_path = data_dir()
 
     if new_path == old_path:
         return JSONResponse({"ok": True, "data_dir": str(new_path)})
@@ -405,7 +406,19 @@ async def settings_data_dir(request: Request):
     # 迁移
     try:
         if db_file.exists():
+            # WAL checkpoint: 将所有 WAL 数据合并到主 DB 文件
+            old_conn = sqlite3.connect(str(db_file))
+            old_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            old_conn.close()
+
+            # 复制主 DB 文件
             shutil.copy2(db_file, new_path / "gateway.db")
+
+            # 复制 WAL 和 SHM 文件（如果存在）
+            for suffix in (".db-wal", ".db-shm"):
+                wal_file = old_path / f"gateway{suffix}"
+                if wal_file.exists():
+                    shutil.copy2(wal_file, new_path / f"gateway{suffix}")
 
         set_data_dir(str(new_path))
 
