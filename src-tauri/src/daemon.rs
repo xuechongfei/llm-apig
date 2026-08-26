@@ -93,13 +93,31 @@ fn pick_free_port(requested: u16) -> u16 {
     requested
 }
 
-/// 数据目录：环境变量优先（冒烟自检用），缺省 %APPDATA%\llm-apig。
+/// 默认数据目录（始终为 %APPDATA%\llm-apig，不随配置变化）。
+fn default_data_dir() -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_default();
+    PathBuf::from(appdata).join("llm-apig")
+}
+
+/// 数据目录：环境变量优先（冒烟自检用），其次读 config.json，
+/// 缺省 %APPDATA%\llm-apig。
 pub(crate) fn data_dir() -> PathBuf {
     if let Ok(d) = std::env::var("LLMAPIG_DATA_DIR") {
         return PathBuf::from(d);
     }
-    let appdata = std::env::var("APPDATA").unwrap_or_default();
-    PathBuf::from(appdata).join("llm-apig")
+    // 从默认位置的 config.json 读取自定义路径
+    let config_path = default_data_dir().join("config.json");
+    if let Ok(content) = fs::read_to_string(&config_path) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(dir) = v.get("data_dir").and_then(|d| d.as_str()) {
+                let p = PathBuf::from(dir);
+                if !p.as_os_str().is_empty() {
+                    return p;
+                }
+            }
+        }
+    }
+    default_data_dir()
 }
 
 pub struct DaemonHandle {
@@ -470,12 +488,43 @@ fn spawn_crash_watcher(
                 matched = true; // 已注册，进入监控
                 let waited = dh.try_wait();
                 match waited {
-                    Ok(Some(status)) if status.code() == Some(0) => {
-                        // 正常退出（如 POST /shutdown）：不重启，只退役监控
-                        log_to_desktop("daemon 正常退出(code 0)，不再监控");
-                        return;
-                    }
                     Ok(Some(status)) => {
+                        // 检查 .restart 标记（用户主动请求重启）
+                        let restart_marker = default_data_dir().join(".restart");
+                        if restart_marker.exists() {
+                            let _ = fs::remove_file(&restart_marker);
+                            log_to_desktop("检测到 .restart 标记，主动重启 daemon");
+                            // take 出旧 handle
+                            let old = guard.take();
+                            drop(old);
+                            drop(guard);
+                            match DaemonHandle::spawn(&handle) {
+                                Ok(dh) => {
+                                    let new_port = dh.port();
+                                    match state.daemon.lock() {
+                                        Ok(mut g) => *g = Some(dh),
+                                        Err(_) => {
+                                            log_to_desktop(
+                                                "AppState 锁中毒，新 daemon 已停止，监控退役");
+                                            return;
+                                        }
+                                    }
+                                    if let Some(w) = handle.get_webview_window("main") {
+                                        let _ = w.eval(&format!(
+                                            "window.location.replace('http://127.0.0.1:{}/admin')",
+                                            new_port));
+                                    }
+                                }
+                                Err(e) => log_to_desktop(&format!(
+                                    ".restart 重启失败: {}", e)),
+                            }
+                            return;
+                        }
+                        // 无 .restart 标记，走原有逻辑
+                        if status.code() == Some(0) {
+                            log_to_desktop("daemon 正常退出(code 0)，不再监控");
+                            return;
+                        }
                         if !restart_budget {
                             log_to_desktop(&format!(
                                 "daemon 再次崩溃({})，重启预算已用尽，停止自动重启",
