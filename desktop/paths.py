@@ -7,7 +7,11 @@ def data_dir() -> Path:
     env = os.environ.get("LLMAPIG_DATA_DIR")
     if env:
         return Path(env)
-    return Path(os.environ["APPDATA"]) / "llm-apig"
+    from desktop.config import get_data_dir, default_data_dir
+    custom = get_data_dir()
+    if custom:
+        return Path(custom)
+    return default_data_dir()
 
 
 def log_dir() -> Path:
