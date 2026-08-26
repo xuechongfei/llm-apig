@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h2>设置</h2>
-    <p>失败冷却、访问鉴权与错误特征库</p>
+    <p>失败冷却、访问鉴权、错误特征库与数据目录</p>
   </div>
 </div>
 
@@ -54,17 +54,123 @@
   </div>
 </div>
 
-<div class="card form-card" style="margin-bottom:22px">
-  <h3 style="margin-top:0">数据目录</h3>
-  <div class="field">
-    <label>当前数据目录</label>
-    <input type="text" value="{{ current_data_dir }}" readonly style="background:#f0f2f5;cursor:default">
-    <span class="hint">可通过 /admin/settings/data-dir 接口迁移</span>
-  </div>
-</div>
-
 <div class="form-actions">
   <button class="btn btn-primary" type="submit">保存设置</button>
 </div>
 </form>
+
+<div class="card form-card" style="margin-bottom:22px">
+  <h3 style="margin-top:0">数据目录</h3>
+  <div class="field">
+    <label>当前数据目录</label>
+    <input id="current-dir" value="{{ current_data_dir }}" readonly
+           style="background:#f7f9fa;color:var(--ink-soft);font-family:var(--mono);font-size:12px">
+  </div>
+  <div class="field" style="margin-top:14px">
+    <label>新数据目录</label>
+    <input id="new-dir" placeholder="如 D:\MyData\llm-apig"
+           style="font-family:var(--mono);font-size:12px">
+    <span class="hint">修改后现有数据将自动迁移到新目录，旧目录将被删除，需重启生效</span>
+  </div>
+  <div id="migrate-msg" style="margin:10px 0;font-size:13px;display:none"></div>
+  <div class="form-actions" style="margin-top:14px">
+    <button class="btn btn-primary" id="btn-migrate" type="button">修改并迁移</button>
+    <button class="btn btn-primary" id="btn-restart" type="button"
+            style="display:none">重启生效</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var btnMigrate = document.getElementById('btn-migrate');
+  var btnRestart = document.getElementById('btn-restart');
+  var msg = document.getElementById('migrate-msg');
+  var newDir = document.getElementById('new-dir');
+  var currentDir = document.getElementById('current-dir');
+
+  function showMsg(text, ok){
+    msg.textContent = text;
+    msg.style.display = 'block';
+    msg.style.color = ok ? 'var(--ok)' : 'var(--bad)';
+    msg.style.background = ok ? 'var(--ok-bg)' : 'var(--bad-bg)';
+    msg.style.padding = '8px 12px';
+    msg.style.borderRadius = '8px';
+  }
+
+  btnMigrate.addEventListener('click', function(){
+    var val = newDir.value.trim();
+    if (!val) { showMsg('请输入新路径', false); return; }
+    btnMigrate.disabled = true;
+    btnMigrate.textContent = '正在迁移…';
+    msg.style.display = 'none';
+
+    var fd = new FormData();
+    fd.append('data_dir', val);
+    fetch('/admin/settings/data-dir', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        btnMigrate.disabled = false;
+        btnMigrate.textContent = '修改并迁移';
+        if (d.ok) {
+          showMsg('数据已迁移到 ' + d.data_dir + '，需要重启生效', true);
+          currentDir.value = d.data_dir;
+          newDir.value = '';
+          btnRestart.style.display = 'inline-flex';
+        } else {
+          showMsg(d.detail || '迁移失败', false);
+        }
+      })
+      .catch(function(e){
+        btnMigrate.disabled = false;
+        btnMigrate.textContent = '修改并迁移';
+        showMsg('网络错误: ' + e.message, false);
+      });
+  });
+
+  btnRestart.addEventListener('click', function(){
+    btnRestart.disabled = true;
+    btnRestart.textContent = '正在重启…';
+    fetch('/admin/settings/restart', {method:'POST'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        showMsg(d.message || '正在重启…', true);
+        // daemon 即将退出，轮询等待页面恢复
+        var attempts = 0;
+        function poll(){
+          attempts++;
+          fetch('/health')
+            .then(function(r){
+              if (r.ok) {
+                // 壳会重定向 webview，但兜底手动刷新
+                window.location.reload();
+              } else if (attempts < 30) {
+                setTimeout(poll, 1000);
+              }
+            })
+            .catch(function(){
+              if (attempts < 30) setTimeout(poll, 1000);
+            });
+        }
+        setTimeout(poll, 1500);
+      })
+      .catch(function(e){
+        // daemon 退出时 fetch 可能失败，这是预期行为
+        showMsg('正在重启…', true);
+        var attempts = 0;
+        function poll(){
+          attempts++;
+          fetch('/health')
+            .then(function(r){
+              if (r.ok) window.location.reload();
+              else if (attempts < 30) setTimeout(poll, 1000);
+            })
+            .catch(function(){
+              if (attempts < 30) setTimeout(poll, 1000);
+            });
+        }
+        setTimeout(poll, 1500);
+      });
+  });
+})();
+</script>
 {% endblock %}
