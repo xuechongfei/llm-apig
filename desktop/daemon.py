@@ -49,6 +49,23 @@ def attach_shutdown(app, token: str, server: uvicorn.Server) -> None:
         return {"status": "ok"}
 
 
+def attach_restart_handler(app, server: uvicorn.Server) -> None:
+    """POST /admin/settings/restart：写入 .restart 标记后优雅退出。
+
+    壳的崩溃监控线程检测到 .restart 标记后会重启 daemon（绕过重启预算）。
+    """
+    from desktop.config import default_data_dir
+
+    @app.post("/admin/settings/restart")
+    async def restart():
+        marker = default_data_dir() / ".restart"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("1", encoding="utf-8")
+        threading.Timer(
+            0.2, lambda: setattr(server, "should_exit", True)).start()
+        return {"ok": True, "message": "正在重启..."}
+
+
 def main() -> int:
     data_env = os.environ.get("LLMAPIG_DATA_DIR")
     if not data_env:
@@ -70,6 +87,16 @@ def main() -> int:
     server = uvicorn.Server(uvicorn.Config(
         app, host="127.0.0.1", port=port, log_config=None))
     attach_shutdown(app, token, server)
+    attach_restart_handler(app, server)
+
+    # 清理残留的 .restart 标记（上次重启可能未完成）
+    from desktop.config import default_data_dir
+    marker = default_data_dir() / ".restart"
+    if marker.exists():
+        marker.unlink()
+        import logging
+        logging.getLogger(__name__).info("已清理残留的 .restart 标记")
+
     server.run()  # 阻塞；should_exit 后返回
     return 0
 
