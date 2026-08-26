@@ -235,11 +235,7 @@ async def mapping_upsert(gid: int, channel_id: int = Form(...),
     try:
         conn.execute(
             "INSERT INTO model_mapping (group_id,channel_id,actual_model,priority,"
-            "supports_image,supports_video) VALUES (?,?,?,?,?,?)"
-            " ON CONFLICT(group_id,channel_id) DO UPDATE SET"
-            " actual_model=excluded.actual_model, priority=excluded.priority,"
-            " supports_image=excluded.supports_image,"
-            " supports_video=excluded.supports_video",
+            "supports_image,supports_video) VALUES (?,?,?,?,?,?)",
             (gid, channel_id, actual_model, priority,
              1 if supports_image else 0, 1 if supports_video else 0))
         conn.commit()
@@ -333,6 +329,7 @@ _SETTING_KEYS = ["cooldown_balance", "cooldown_ratelimit", "cooldown_auth",
 async def settings_page(request: Request):
     from app.db import get_setting
     from app.errors import BALANCE_PATTERNS, CAPABILITY_PATTERNS
+    from desktop.paths import data_dir
     conn = connect()
     try:
         values = {k: get_setting(conn, k, "") for k in _SETTING_KEYS}
@@ -342,7 +339,10 @@ async def settings_page(request: Request):
         values["balance_patterns"] = "\n".join(BALANCE_PATTERNS)
     if not values["capability_patterns"]:
         values["capability_patterns"] = "\n".join(CAPABILITY_PATTERNS)
-    return templates.TemplateResponse(request, "settings.html", {"v": values})
+    return templates.TemplateResponse(request, "settings.html", {
+        "v": values,
+        "current_data_dir": str(data_dir()),
+    })
 
 
 @router.post("/settings")
@@ -356,5 +356,60 @@ async def settings_save(request: Request):
     finally:
         conn.close()
     return RedirectResponse("/admin/settings", status_code=303)
+
+
+@router.post("/settings/data-dir")
+async def settings_data_dir(request: Request):
+    import os
+    import shutil
+    from pathlib import Path
+
+    from desktop.config import set_data_dir
+
+    form = await request.form()
+    new_dir = form.get("data_dir", "").strip()
+
+    if not new_dir:
+        return JSONResponse({"ok": False, "detail": "路径不能为空"}, 400)
+
+    new_path = Path(new_dir).resolve()
+    old_path = Path(os.environ.get("LLMAPIG_DATA_DIR", "") or
+                    str(Path(os.environ["APPDATA"]) / "llm-apig"))
+
+    if new_path == old_path:
+        return JSONResponse({"ok": True, "data_dir": str(new_path)})
+
+    # 校验：可创建且可写
+    try:
+        new_path.mkdir(parents=True, exist_ok=True)
+        test_file = new_path / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+    except (OSError, PermissionError) as e:
+        return JSONResponse(
+            {"ok": False, "detail": f"路径不可写: {e}"}, 400)
+
+    # 校验：磁盘空间
+    db_file = old_path / "gateway.db"
+    if db_file.exists():
+        db_size = db_file.stat().st_size
+        usage = shutil.disk_usage(new_path)
+        if usage.free < db_size * 1.5:
+            return JSONResponse(
+                {"ok": False, "detail": "目标磁盘空间不足"}, 400)
+
+    # 迁移
+    try:
+        if db_file.exists():
+            shutil.copy2(db_file, new_path / "gateway.db")
+
+        set_data_dir(str(new_path))
+
+        shutil.rmtree(old_path, ignore_errors=True)
+    except Exception as e:
+        return JSONResponse(
+            {"ok": False, "detail": f"迁移失败: {e}"}, 500)
+
+    return JSONResponse({"ok": True, "data_dir": str(new_path)})
 
 

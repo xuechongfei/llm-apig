@@ -54,6 +54,15 @@
   </div>
 </div>
 
+<div class="card form-card" style="margin-bottom:22px">
+  <h3 style="margin-top:0">数据目录</h3>
+  <div class="field">
+    <label>当前数据目录</label>
+    <input type="text" value="{{ current_data_dir }}" readonly style="background:#f0f2f5;cursor:default">
+    <span class="hint">可通过 /admin/settings/data-dir 接口迁移</span>
+  </div>
+</div>
+
 <div class="form-actions">
   <button class="btn btn-primary" type="submit">保存设置</button>
 </div>

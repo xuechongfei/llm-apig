@@ -55,3 +55,128 @@ async def test_settings_page(tmp_path, monkeypatch):
         conn.close()
 
 
+import json
+import os
+import shutil
+from pathlib import Path
+
+
+async def test_data_dir_migration_success(tmp_path, monkeypatch):
+    """正常迁移：gateway.db 被复制到新目录，config.json 写入，旧目录删除。"""
+    old_dir = tmp_path / "old-data"
+    old_dir.mkdir()
+    new_dir = tmp_path / "new-data"
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("LLMAPIG_DATA_DIR", str(old_dir))
+    monkeypatch.setattr(db, "DB_PATH", old_dir / "gateway.db")
+    db.init_db()
+
+    # 写入一些数据以便验证迁移
+    conn = db.connect()
+    conn.execute("INSERT INTO settings (key, value) VALUES ('test', 'migrated')")
+    conn.commit()
+    conn.close()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://t"
+    ) as c:
+        resp = await c.post("/admin/settings/data-dir", data={
+            "data_dir": str(new_dir)
+        })
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["ok"] is True
+        assert str(new_dir) in result["data_dir"]
+
+    # 验证 gateway.db 已迁移
+    assert (new_dir / "gateway.db").exists()
+    # 验证 config.json 已写入
+    config = json.loads(
+        (tmp_path / "llm-apig" / "config.json").read_text(encoding="utf-8"))
+    assert config["data_dir"] == str(new_dir)
+    # 验证旧目录已删除
+    assert not old_dir.exists()
+
+
+async def test_data_dir_migration_same_path(tmp_path, monkeypatch):
+    """新旧路径相同时无操作返回成功。"""
+    old_dir = tmp_path / "data"
+    old_dir.mkdir()
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("LLMAPIG_DATA_DIR", str(old_dir))
+    monkeypatch.setattr(db, "DB_PATH", old_dir / "gateway.db")
+    db.init_db()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://t"
+    ) as c:
+        resp = await c.post("/admin/settings/data-dir", data={
+            "data_dir": str(old_dir)
+        })
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+
+async def test_data_dir_migration_invalid_path(tmp_path, monkeypatch):
+    """空路径返回错误。"""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("LLMAPIG_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "data" / "gateway.db")
+    db.init_db()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://t"
+    ) as c:
+        resp = await c.post("/admin/settings/data-dir", data={
+            "data_dir": ""
+        })
+        assert resp.status_code == 400
+        assert resp.json()["ok"] is False
+
+
+async def test_data_dir_migration_unwritable(tmp_path, monkeypatch):
+    """目标路径不可写时返回错误。"""
+    old_dir = tmp_path / "data"
+    old_dir.mkdir()
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("LLMAPIG_DATA_DIR", str(old_dir))
+    monkeypatch.setattr(db, "DB_PATH", old_dir / "gateway.db")
+    db.init_db()
+
+    # 创建一个只读目录（Windows 下用文件冒充目录）
+    bad_path = tmp_path / "bad"
+    bad_path.write_text("block")  # 文件存在但不是目录，无法 mkdir
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://t"
+    ) as c:
+        resp = await c.post("/admin/settings/data-dir", data={
+            "data_dir": str(bad_path / "sub")
+        })
+        assert resp.status_code == 400
+        assert resp.json()["ok"] is False
+
+
+async def test_settings_page_includes_data_dir(tmp_path, monkeypatch):
+    """设置页面应显示当前数据目录路径。"""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("LLMAPIG_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "data" / "gateway.db")
+    db.init_db()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://t"
+    ) as c:
+        resp = await c.get("/admin/settings")
+        assert resp.status_code == 200
+        assert str(tmp_path / "data") in resp.text
+
+
