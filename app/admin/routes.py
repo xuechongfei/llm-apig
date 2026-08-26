@@ -235,7 +235,11 @@ async def mapping_upsert(gid: int, channel_id: int = Form(...),
     try:
         conn.execute(
             "INSERT INTO model_mapping (group_id,channel_id,actual_model,priority,"
-            "supports_image,supports_video) VALUES (?,?,?,?,?,?)",
+            "supports_image,supports_video) VALUES (?,?,?,?,?,?)"
+            " ON CONFLICT(group_id,channel_id) DO UPDATE SET"
+            " actual_model=excluded.actual_model, priority=excluded.priority,"
+            " supports_image=excluded.supports_image,"
+            " supports_video=excluded.supports_video",
             (gid, channel_id, actual_model, priority,
              1 if supports_image else 0, 1 if supports_video else 0))
         conn.commit()
