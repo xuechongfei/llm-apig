@@ -30,7 +30,7 @@ def load_config() -> dict:
             return {}
         with open(cf, "r", encoding="utf-8") as f:
             return json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
         logger.warning("config.json 读取失败: %s，回退到默认配置", e)
         return {}
 
