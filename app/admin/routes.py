@@ -1,4 +1,5 @@
 import time
+import sqlite3
 from pathlib import Path
 
 import httpx
@@ -226,7 +227,7 @@ async def group_detail(request: Request, gid: int):
 
 
 @router.post("/groups/{gid}/mappings")
-async def mapping_upsert(gid: int, channel_id: int = Form(...),
+async def mapping_create(gid: int, channel_id: int = Form(...),
                          actual_model: str = Form(...),
                          priority: int = Form(100),
                          supports_image: str | None = Form(None),
@@ -235,16 +236,38 @@ async def mapping_upsert(gid: int, channel_id: int = Form(...),
     try:
         conn.execute(
             "INSERT INTO model_mapping (group_id,channel_id,actual_model,priority,"
-            "supports_image,supports_video) VALUES (?,?,?,?,?,?)"
-            " ON CONFLICT(group_id,channel_id,actual_model) DO UPDATE SET"
-            " actual_model=excluded.actual_model, priority=excluded.priority,"
-            " supports_image=excluded.supports_image,"
-            " supports_video=excluded.supports_video",
+            "supports_image,supports_video) VALUES (?,?,?,?,?,?)",
             (gid, channel_id, actual_model, priority,
              1 if supports_image else 0, 1 if supports_video else 0))
         conn.commit()
+    except sqlite3.IntegrityError:
+        return RedirectResponse(
+            f"/admin/groups/{gid}?error=该渠道下已存在相同模型名", status_code=303)
     finally:
         conn.close()
+    return RedirectResponse(f"/admin/groups/{gid}", status_code=303)
+
+
+@router.post("/mappings/{mid}/edit")
+async def mapping_edit(mid: int, actual_model: str = Form(...),
+                       priority: int = Form(100),
+                       supports_image: str | None = Form(None),
+                       supports_video: str | None = Form(None)):
+    conn = connect()
+    try:
+        conn.execute(
+            "UPDATE model_mapping SET actual_model=?, priority=?,"
+            " supports_image=?, supports_video=? WHERE id=?",
+            (actual_model, priority,
+             1 if supports_image else 0, 1 if supports_video else 0, mid))
+        conn.commit()
+        row = conn.execute("SELECT group_id FROM model_mapping WHERE id=?",
+                           (mid,)).fetchone()
+        gid = row["group_id"] if row else None
+    finally:
+        conn.close()
+    if gid is None:
+        return RedirectResponse("/admin/groups", status_code=303)
     return RedirectResponse(f"/admin/groups/{gid}", status_code=303)
 
 
