@@ -1,5 +1,6 @@
 """一键构建：pytest → PyInstaller daemon → tauri build (NSIS) → 冒烟三段自检"""
 
+import argparse
 import json
 import os
 import shutil
@@ -198,9 +199,17 @@ def smoke() -> None:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description="llm-apig 一键构建")
+    ap.add_argument("--no-smoke", action="store_true",
+                    help="跳过冒烟自检（CI 环境使用）")
+    ap.add_argument("--no-test", action="store_true",
+                    help="跳过 pytest（CI 环境测试已单独跑）")
+    args = ap.parse_args()
+
     ver = version()
     print(f"=== 构建 llm-apig v{ver}（Tauri 壳） ===")
-    run(["uv", "run", "pytest", "tests/", "-q"])
+    if not args.no_test:
+        run(["uv", "run", "pytest", "tests/", "-q"])
     pyinstaller_daemon()
     sync_tauri_version(ver)
     tauri_build()
@@ -213,7 +222,10 @@ def main() -> None:
         print(f"安装包: {dst}")
     for lj in BUNDLE.glob("nsis/latest.json"):
         print(f"更新清单（上传到 Release）: {lj}")
-    smoke()
+    if not args.no_smoke:
+        smoke()
+    else:
+        print("跳过冒烟自检（--no-smoke）")
     print("=== 构建全部完成 ===")
 
 

@@ -7,7 +7,7 @@
 
 1. 安装 [uv](https://docs.astral.sh/uv/)
 2. 双击 `start.bat`（或 `uv run python -m app.main`）
-3. 浏览器自动打开管理界面 http://127.0.0.1:8317/admin
+3. 浏览器自动打开管理界面 http://127.0.0.1:58317/admin
 
 ## 使用
 
@@ -15,8 +15,8 @@
 2. **模型组**：建统一模型名（如 `my-claude`），把渠道加进组里，设真实模型名、
    优先级（越小越优先）、图片/视频能力标记
 3. **客户端指向网关**：
-   - Anthropic 协议：`ANTHROPIC_BASE_URL=http://127.0.0.1:8317`，模型填统一模型名
-   - OpenAI 协议：`base_url=http://127.0.0.1:8317/v1`
+   - Anthropic 协议：`ANTHROPIC_BASE_URL=http://127.0.0.1:58317`，模型填统一模型名
+   - OpenAI 协议：`base_url=http://127.0.0.1:58317/v1`
    - 若在「设置」里配置了访问令牌，客户端 api key 填该令牌；否则任意
 
 ## 切换规则
@@ -43,8 +43,15 @@
 4. 一键构建：`uv run python desktop/build.py`
    （自动执行：测试 → PyInstaller daemon → tauri build → NSIS 安装包 → 冒烟自检，
    产物 `dist/llm-apig-setup-<ver>.exe` + `latest.json`）
-5. 发布：上传 NSIS 安装包 + latest.json 到 GitHub Release
-   （tag = 版本号，仓库 xuechongfei/llm-apig），Tauri updater 自动更新即生效
+5. 发布：推送 `v<版本号>` tag 到 GitHub，Actions 自动构建并上传到 Release：
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+   GitHub Actions 触发后自动执行：构建 → 冒烟跳过（CI 无桌面）→ 上传
+   `*-setup.exe`、`*.nsis.zip`、`*.nsis.zip.sig`、`latest.json` 到 Release。
+   Tauri updater 自动检测新版本并提示用户更新。
+   也可在 Actions 页面手动触发 `Release` workflow（`workflow_dispatch`）。
 
 ### 桌面开发
 
@@ -56,7 +63,7 @@
 2. 首次运行若出现蓝色「Windows 已保护你的电脑」提示：
    点「更多信息」→「仍要运行」（无签名软件的正常提示）
 3. 关闭窗口后程序驻留系统托盘，网关继续服务；托盘右键可退出
-4. 客户端配置同「使用」章节（地址 `http://127.0.0.1:8317`，若端口被占程序自动换用）
+4. 客户端配置同「使用」章节（地址 `http://127.0.0.1:58317`，若端口被占程序自动换用）
 
 ### 更新检查
 

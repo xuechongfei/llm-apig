@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
+
+      - name: Build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: uv run python desktop/build.py --no-smoke
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/llm-apig-setup-*.exe
+            src-tauri/target/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/nsis/latest.json
