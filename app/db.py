@@ -74,9 +74,10 @@ CREATE TABLE IF NOT EXISTS channel_state (
 """
 
 
-MIGRATIONS = [
-    # version 1 → 2: 模型组支持同渠道多模型
+MIGRATIONS: list[str] = [
+    # version 0 → 1: 模型组支持同渠道多模型
     """
+    BEGIN;
     CREATE TABLE model_mapping_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_id INTEGER NOT NULL REFERENCES model_group(id) ON DELETE CASCADE,
@@ -90,6 +91,7 @@ MIGRATIONS = [
     INSERT INTO model_mapping_new SELECT * FROM model_mapping;
     DROP TABLE model_mapping;
     ALTER TABLE model_mapping_new RENAME TO model_mapping;
+    COMMIT;
     """,
 ]
 
