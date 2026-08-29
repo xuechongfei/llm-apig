@@ -25,15 +25,38 @@
 -- 新：UNIQUE (group_id, channel_id, actual_model)
 ```
 
-执行方式：直接在代码中修改 `SCHEMA` 常量，SQLite 不支持 `ALTER TABLE DROP CONSTRAINT`，需要在应用启动时做迁移：
+执行方式：引入版本化迁移机制，在 `settings` 表中记录 `schema_version`，启动时按版本号顺序执行未跑过的迁移，每执行完一个更新版本号，已执行过的自动跳过。
 
-```sql
--- 迁移逻辑
--- 1. 创建新表 model_mapping_new（含新约束）
--- 2. INSERT INTO model_mapping_new SELECT * FROM model_mapping
--- 3. DROP TABLE model_mapping
--- 4. ALTER TABLE model_mapping_new RENAME TO model_mapping
+```python
+# db.py 新增
+MIGRATIONS = [
+    # version 1: 初始 schema，幂等（CREATE TABLE IF NOT EXISTS，已覆盖）
+    # version 2: 模型组支持同渠道多模型
+    """
+    CREATE TABLE model_mapping_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL REFERENCES model_group(id) ON DELETE CASCADE,
+        channel_id INTEGER NOT NULL REFERENCES channel(id) ON DELETE CASCADE,
+        actual_model TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 100,
+        supports_image INTEGER NOT NULL DEFAULT 0,
+        supports_video INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (group_id, channel_id, actual_model)
+    );
+    INSERT INTO model_mapping_new SELECT * FROM model_mapping;
+    DROP TABLE model_mapping;
+    ALTER TABLE model_mapping_new RENAME TO model_mapping;
+    """,
+]
 ```
+
+`init_db()` 流程：
+1. 执行 `SCHEMA`（CREATE TABLE IF NOT EXISTS，幂等）
+2. 读 `settings` 表获取 `schema_version`，默认 0
+3. 从 `version+1` 开始依次执行 `MIGRATIONS[version]`（索引 = version-1）
+4. 每执行完一个，更新 `schema_version` 到 settings 表
+
+以后每次改 schema 只需往 `MIGRATIONS` 列表末尾追加一条，不会重复执行。
 
 ### 后端路由变更
 
