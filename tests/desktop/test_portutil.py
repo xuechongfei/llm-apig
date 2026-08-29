@@ -190,6 +190,7 @@ class TestDaemonPortConflict:
                 **os.environ,
                 "LLMAPIG_DATA_DIR": str(tmp_path),
                 "LLMAPIG_PORT": str(port),
+                "PYTHONIOENCODING": "utf-8",
             }
             proc = subprocess.run(
                 [sys.executable, "-c",
@@ -200,5 +201,5 @@ class TestDaemonPortConflict:
             )
             # 退出码应为 3（端口冲突）
             assert proc.returncode == 3
-            stderr = proc.stderr.decode("gbk", errors="replace")
+            stderr = proc.stderr.decode("utf-8", errors="replace")
             assert "端口" in stderr
