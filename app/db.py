@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS model_mapping (
     priority INTEGER NOT NULL DEFAULT 100,
     supports_image INTEGER NOT NULL DEFAULT 0,
     supports_video INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (group_id, channel_id)
+    UNIQUE (group_id, channel_id, actual_model)
 );
 CREATE TABLE IF NOT EXISTS request_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +74,26 @@ CREATE TABLE IF NOT EXISTS channel_state (
 """
 
 
+MIGRATIONS = [
+    # version 1 → 2: 模型组支持同渠道多模型
+    """
+    CREATE TABLE model_mapping_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL REFERENCES model_group(id) ON DELETE CASCADE,
+        channel_id INTEGER NOT NULL REFERENCES channel(id) ON DELETE CASCADE,
+        actual_model TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 100,
+        supports_image INTEGER NOT NULL DEFAULT 0,
+        supports_video INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (group_id, channel_id, actual_model)
+    );
+    INSERT INTO model_mapping_new SELECT * FROM model_mapping;
+    DROP TABLE model_mapping;
+    ALTER TABLE model_mapping_new RENAME TO model_mapping;
+    """,
+]
+
+
 def connect() -> sqlite3.Connection:
     path = _db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -89,6 +109,13 @@ def init_db() -> None:
     try:
         conn.executescript(SCHEMA)
         conn.commit()
+        cur_ver = int(get_setting(conn, "schema_version", "0"))
+        for i, sql in enumerate(MIGRATIONS):
+            ver = i + 1
+            if ver <= cur_ver:
+                continue
+            conn.executescript(sql)
+            set_setting(conn, "schema_version", str(ver))
     finally:
         conn.close()
 
