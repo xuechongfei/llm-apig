@@ -20,14 +20,14 @@ def test_pick_port_env_valid():
 
 
 def test_pick_port_env_invalid_falls_back():
-    assert daemon.pick_port("not-a-port") == 8317
-    assert daemon.pick_port(None) == 8317
-    assert daemon.pick_port("") == 8317
+    assert daemon.pick_port("not-a-port") == 58317
+    assert daemon.pick_port(None) == 58317
+    assert daemon.pick_port("") == 58317
 
 
 def test_runtime_payload_shape():
-    p = daemon.runtime_payload(8317, "tok")
-    assert p["port"] == 8317
+    p = daemon.runtime_payload(58317, "tok")
+    assert p["port"] == 58317
     assert p["token"] == "tok"
     assert p["pid"] == os.getpid()
     assert isinstance(p["version"], str) and p["version"]

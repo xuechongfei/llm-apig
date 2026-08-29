@@ -2,7 +2,7 @@
 
 环境变量（均由壳注入）：
   LLMAPIG_DATA_DIR  数据目录（必需，缺失退出码 2）
-  LLMAPIG_PORT      监听端口（缺省 8317）
+  LLMAPIG_PORT      监听端口（缺省 58317）
 """
 
 import json
@@ -22,7 +22,7 @@ def pick_port(env: str | None) -> int:
             p = 0
         if 0 < p < 65536:
             return p
-    return 8317
+    return 58317
 
 
 def runtime_payload(port: int, token: str) -> dict:

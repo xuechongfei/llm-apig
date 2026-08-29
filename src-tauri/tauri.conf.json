@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "build": {
     "frontendDist": "../desktop-ui",
-    "devUrl": "http://127.0.0.1:8317/admin"
+    "devUrl": "http://127.0.0.1:58317/admin"
   },
   "app": {
     "withGlobalTauri": true,

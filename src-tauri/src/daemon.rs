@@ -82,7 +82,7 @@ fn port_in_use(port: u16) -> bool {
     .is_ok()
 }
 
-/// 8317 起找第一个空闲端口（最多 +19）。被占大概率是上次残留的孤儿
+/// 58317 起找第一个空闲端口（最多 +19）。被占大概率是上次残留的孤儿
 /// daemon —— 换端口而不是杀进程，不误杀。
 fn pick_free_port(requested: u16) -> u16 {
     for port in requested..requested.saturating_add(20) {
@@ -235,7 +235,7 @@ impl DaemonHandle {
         let requested: u16 = std::env::var("LLMAPIG_PORT")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(8317);
+            .unwrap_or(58317);
 
         let exe_dir = std::env::current_exe()
             .unwrap_or_default()
