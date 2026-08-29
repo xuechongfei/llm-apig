@@ -255,19 +255,23 @@ async def mapping_edit(mid: int, actual_model: str = Form(...),
                        supports_video: str | None = Form(None)):
     conn = connect()
     try:
+        # Fetch group_id first so we can redirect on error
+        row = conn.execute("SELECT group_id FROM model_mapping WHERE id=?",
+                           (mid,)).fetchone()
+        if row is None:
+            return RedirectResponse("/admin/groups", status_code=303)
+        gid = row["group_id"]
         conn.execute(
             "UPDATE model_mapping SET actual_model=?, priority=?,"
             " supports_image=?, supports_video=? WHERE id=?",
             (actual_model, priority,
              1 if supports_image else 0, 1 if supports_video else 0, mid))
         conn.commit()
-        row = conn.execute("SELECT group_id FROM model_mapping WHERE id=?",
-                           (mid,)).fetchone()
-        gid = row["group_id"] if row else None
+    except sqlite3.IntegrityError:
+        return RedirectResponse(
+            f"/admin/groups/{gid}?error=该渠道下已存在相同模型名", status_code=303)
     finally:
         conn.close()
-    if gid is None:
-        return RedirectResponse("/admin/groups", status_code=303)
     return RedirectResponse(f"/admin/groups/{gid}", status_code=303)
 
 

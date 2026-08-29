@@ -54,7 +54,6 @@
 <h3 id="form-title">添加映射</h3>
 <div class="card form-card">
 <form id="map-form" class="stack" method="post" action="/admin/groups/{{ group["id"] }}/mappings">
-  <input type="hidden" id="edit-mid" name="edit_mid" value="">
   <div class="field">
     <label>渠道</label>
     <select name="channel_id" id="channel-select">
@@ -88,7 +87,6 @@
   var title = document.getElementById('form-title');
   var submitBtn = document.getElementById('submit-btn');
   var cancelBtn = document.getElementById('cancel-btn');
-  var editMid = document.getElementById('edit-mid');
   var channelSelect = document.getElementById('channel-select');
   var actualModel = document.getElementById('actual-model');
   var priority = document.getElementById('priority');
@@ -98,7 +96,6 @@
   var btns = document.querySelectorAll('.edit-btn');
   btns.forEach(function(btn){
     btn.addEventListener('click', function(){
-      editMid.value = this.dataset.mid;
       channelSelect.value = this.dataset.channelId;
       channelSelect.disabled = true;
       actualModel.value = this.dataset.actualModel;
@@ -114,7 +111,6 @@
   });
 
   window.cancelEdit = function(){
-    editMid.value = '';
     channelSelect.disabled = false;
     channelSelect.selectedIndex = 0;
     actualModel.value = '';
