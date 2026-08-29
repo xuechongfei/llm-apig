@@ -9,6 +9,13 @@
   </div>
 </div>
 
+{% set error = request.query_params.get('error', '') %}
+{% if error %}
+<div style="margin:0 0 16px;padding:10px 16px;background:var(--bad-bg);color:var(--bad);border-radius:var(--radius);font-size:13px">
+  {{ error }}
+</div>
+{% endif %}
+
 <div class="card table-scroll">
 <table>
 <thead><tr><th>渠道</th><th>协议</th><th>真实模型名</th><th>优先级</th>
@@ -26,6 +33,13 @@
   <div style="display:flex;gap:6px">
   <form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=up"><button class="btn btn-sm" title="上移">↑</button></form>
   <form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/move?dir=down"><button class="btn btn-sm" title="下移">↓</button></form>
+  <button class="btn btn-sm edit-btn"
+          data-mid="{{ m["id"] }}"
+          data-channel-id="{{ m["channel_id"] }}"
+          data-actual-model="{{ m["actual_model"] }}"
+          data-priority="{{ m["priority"] }}"
+          data-supports-image="{{ m["supports_image"] }}"
+          data-supports-video="{{ m["supports_video"] }}">编辑</button>
   <form class="inline" method="post" action="/admin/mappings/{{ m["id"] }}/delete"><button class="btn btn-sm btn-danger">删除</button></form>
   </div>
 </td>
@@ -37,12 +51,13 @@
 </table>
 </div>
 
-<h3>添加映射</h3>
+<h3 id="form-title">添加映射</h3>
 <div class="card form-card">
-<form class="stack" method="post" action="/admin/groups/{{ group["id"] }}/mappings">
+<form id="map-form" class="stack" method="post" action="/admin/groups/{{ group["id"] }}/mappings">
+  <input type="hidden" id="edit-mid" name="edit_mid" value="">
   <div class="field">
     <label>渠道</label>
-    <select name="channel_id">
+    <select name="channel_id" id="channel-select">
     {% for c in channels %}
     <option value="{{ c["id"] }}">{{ c["name"] }}（{{ c["protocol"] }}）</option>
     {% endfor %}
@@ -50,19 +65,67 @@
   </div>
   <div class="field">
     <label>真实模型名</label>
-    <input name="actual_model" required class="code" placeholder="如 claude-sonnet-4-5 / deepseek-chat">
+    <input name="actual_model" id="actual-model" required class="code" placeholder="如 claude-sonnet-4-5 / deepseek-chat">
   </div>
   <div class="field">
     <label>优先级 <span class="hint">越小越优先</span></label>
-    <input name="priority" type="number" value="100" style="max-width:140px">
+    <input name="priority" id="priority" type="number" value="100" style="max-width:140px">
   </div>
   <div style="display:flex;gap:22px">
-    <label class="check"><input type="checkbox" name="supports_image"> 支持图片输入</label>
-    <label class="check"><input type="checkbox" name="supports_video"> 支持视频输入</label>
+    <label class="check"><input type="checkbox" name="supports_image" id="supports-image"> 支持图片输入</label>
+    <label class="check"><input type="checkbox" name="supports_video" id="supports-video"> 支持视频输入</label>
   </div>
-  <div class="form-actions">
-    <button class="btn btn-primary" type="submit">保存映射</button>
+  <div class="form-actions" style="display:flex;gap:10px">
+    <button class="btn btn-primary" type="submit" id="submit-btn">保存映射</button>
+    <button class="btn" type="button" id="cancel-btn" style="display:none" onclick="cancelEdit()">取消编辑</button>
   </div>
 </form>
 </div>
+
+<script>
+(function(){
+  var form = document.getElementById('map-form');
+  var title = document.getElementById('form-title');
+  var submitBtn = document.getElementById('submit-btn');
+  var cancelBtn = document.getElementById('cancel-btn');
+  var editMid = document.getElementById('edit-mid');
+  var channelSelect = document.getElementById('channel-select');
+  var actualModel = document.getElementById('actual-model');
+  var priority = document.getElementById('priority');
+  var supportsImage = document.getElementById('supports-image');
+  var supportsVideo = document.getElementById('supports-video');
+
+  var btns = document.querySelectorAll('.edit-btn');
+  btns.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      editMid.value = this.dataset.mid;
+      channelSelect.value = this.dataset.channelId;
+      channelSelect.disabled = true;
+      actualModel.value = this.dataset.actualModel;
+      priority.value = this.dataset.priority;
+      supportsImage.checked = this.dataset.supportsImage === '1';
+      supportsVideo.checked = this.dataset.supportsVideo === '1';
+      form.action = '/admin/mappings/' + this.dataset.mid + '/edit';
+      title.textContent = '编辑映射';
+      submitBtn.textContent = '保存修改';
+      cancelBtn.style.display = '';
+      title.scrollIntoView({behavior:'smooth'});
+    });
+  });
+
+  window.cancelEdit = function(){
+    editMid.value = '';
+    channelSelect.disabled = false;
+    channelSelect.selectedIndex = 0;
+    actualModel.value = '';
+    priority.value = '100';
+    supportsImage.checked = false;
+    supportsVideo.checked = false;
+    form.action = '/admin/groups/{{ group["id"] }}/mappings';
+    title.textContent = '添加映射';
+    submitBtn.textContent = '保存映射';
+    cancelBtn.style.display = 'none';
+  };
+})();
+</script>
 {% endblock %}
