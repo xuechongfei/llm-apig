@@ -93,6 +93,10 @@ MIGRATIONS: list[str] = [
     ALTER TABLE model_mapping_new RENAME TO model_mapping;
     COMMIT;
     """,
+    # version 1 → 2: 请求日志增加 request_body 列
+    """
+    ALTER TABLE request_log ADD COLUMN request_body TEXT;
+    """,
 ]
 
 

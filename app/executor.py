@@ -12,7 +12,41 @@ from app.logging_ import add_attempt, create_log, finish_log, set_cooldown
 from app.selector import detect_modalities, select_candidates
 
 MAX_ATTEMPTS = 5
+MAX_BODY_SIZE = 100_000  # 请求报文最大存储字节数
 _transport: httpx.MockTransport | None = None  # 测试注入点
+
+def _sanitize_body(payload: dict) -> str | None:
+    """将请求报文脱敏后返回 JSON 字符串：base64 图片数据替换为占位符，截断到 MAX_BODY_SIZE。"""
+    if not payload:
+        return None
+    try:
+        sanitized = _replace_binary(payload)
+        text = json.dumps(sanitized, ensure_ascii=False)
+        if len(text) > MAX_BODY_SIZE:
+            text = text[:MAX_BODY_SIZE] + "\n…[truncated]"
+        return text
+    except Exception:
+        return None
+
+
+def _replace_binary(node):
+    """递归替换 source.data 等 base64 二进制字段为占位符。"""
+    if isinstance(node, dict):
+        replaced = {}
+        for k, v in node.items():
+            if k == "data" and isinstance(v, str) and len(v) > 512:
+                replaced[k] = f"[base64 data, {len(v)} chars]"
+            elif k == "source" and isinstance(v, dict):
+                replaced[k] = _replace_binary(v)
+            elif k == "url" and isinstance(v, str) and v.startswith("data:"):
+                replaced[k] = f"[data URL, {len(v)} chars]"
+            else:
+                replaced[k] = _replace_binary(v)
+        return replaced
+    if isinstance(node, list):
+        return [_replace_binary(item) for item in node]
+    return node
+
 
 _COOLDOWN_SETTING_KEYS = {
     "insufficient_balance": ("cooldown_balance", 600),
@@ -95,10 +129,13 @@ async def execute(conn, *, entry_protocol: str, group_name: str,
                         group_name=group_name,
                         path="/v1/messages" if entry_protocol == "anthropic"
                         else "/v1/chat/completions",
-                        stream=stream)
+                        stream=stream,
+                        request_body=_sanitize_body(payload))
     for s in skipped:
         add_attempt(conn, log_id, channel_id=s.channel_id,
-                    channel_name=s.channel_name, skipped=s.reason)
+                    channel_name=s.channel_name,
+                    actual_model=s.actual_model,
+                    skipped=s.reason)
 
     if not candidates:
         finish_log(conn, log_id, status="failed",

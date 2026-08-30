@@ -1,11 +1,13 @@
 import time
 
 
-def create_log(conn, *, client_protocol, group_name, path, stream: bool) -> int:
+def create_log(conn, *, client_protocol, group_name, path, stream: bool,
+               request_body: str | None = None) -> int:
     cur = conn.execute(
-        "INSERT INTO request_log (created_at, client_protocol, group_name, path, stream)"
-        " VALUES (?,?,?,?,?)",
-        (time.time(), client_protocol, group_name, path, 1 if stream else 0),
+        "INSERT INTO request_log (created_at, client_protocol, group_name, path, stream,"
+        " request_body) VALUES (?,?,?,?,?,?)",
+        (time.time(), client_protocol, group_name, path, 1 if stream else 0,
+         request_body),
     )
     conn.commit()
     return cur.lastrowid

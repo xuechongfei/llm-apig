@@ -18,6 +18,13 @@
   <div><dt>总耗时</dt><dd class="code">{{ log["total_duration_ms"] }} ms</dd></div>
 </dl>
 
+{% if log["request_body"] %}
+<h3>请求报文</h3>
+<div class="card">
+<pre class="raw" style="max-height:360px;overflow-y:auto">{{ log["request_body"] }}</pre>
+</div>
+{% endif %}
+
 <h3>尝试链</h3>
 <div class="card">
 <table>
@@ -33,7 +40,7 @@
 <td>{{ "是" if a["converted"] else "否" }}</td>
 <td class="code">{{ a["http_status"] or "—" }}</td>
 <td>{{ a["error_category"] or "—" }}</td>
-<td style="max-width:280px">{{ a["error_summary"] or "—" }}</td>
+<td style="max-width:280px">{{ a["error_summary"] if a["error_summary"] else ("能力不匹配：" + a["skipped"]) if a["skipped"] else "—" }}</td>
 </tr>
 {% if a["raw_error"] %}
 <tr><td colspan="7" style="padding:0"><pre class="raw">{{ a["raw_error"] }}</pre></td></tr>

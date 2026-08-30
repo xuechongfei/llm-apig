@@ -43,6 +43,7 @@ class Candidate:
 class Skipped:
     channel_id: int
     channel_name: str
+    actual_model: str
     reason: str  # "capability"
 
 
@@ -72,7 +73,8 @@ def select_candidates(conn, group_name: str, entry_protocol: str,
         if ("image" in modalities and not r["supports_image"]) or (
             "video" in modalities and not r["supports_video"]
         ):
-            skipped.append(Skipped(r["channel_id"], r["channel_name"], "capability"))
+            skipped.append(Skipped(r["channel_id"], r["channel_name"],
+                               r["actual_model"], "capability"))
             continue
         cooling = r["cooldown_until"] > now
         candidates.append(Candidate(
