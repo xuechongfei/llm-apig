@@ -24,9 +24,9 @@
 <td><b><a href="/admin/groups/{{ g["id"] }}" style="text-decoration:none">{{ g["name"] }}</a></b></td>
 <td>{{ g["n"] }}</td>
 <td>
-<form class="inline" method="post" action="/admin/groups/{{ g["id"] }}/delete"
- onsubmit="return confirm('确认删除该模型组？')">
-  <button class="btn btn-sm btn-danger">删除</button></form>
+<form class="inline" method="post" action="/admin/groups/{{ g["id"] }}/delete">
+  <button class="btn btn-sm btn-danger" onclick="return confirmDelete(this, '删除')">删除</button>
+</form>
 </td>
 </tr>
 {% else %}

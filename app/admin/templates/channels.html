@@ -28,9 +28,9 @@
   <form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/clear-cooldown">
     <button class="btn btn-sm">清除冷却</button></form>
   <button class="btn btn-sm" onclick="testChannel({{ c["id"] }}, this)">测试</button>
-  <form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/delete"
-   onsubmit="return confirm('确认删除该渠道？')">
-    <button class="btn btn-sm btn-danger">删除</button></form>
+  <form class="inline" method="post" action="/admin/channels/{{ c["id"] }}/delete">
+    <button class="btn btn-sm btn-danger" onclick="return confirmDelete(this, '删除')">删除</button>
+  </form>
   </div>
 </td>
 </tr>
@@ -47,7 +47,9 @@ async function testChannel(id, btn){
   try{
     const r = await fetch(`/admin/channels/${id}/test`, {method:"POST"});
     const j = await r.json();
-    alert((j.ok ? "✅ 连通正常\n" : "❌ 失败\n") + j.detail);
+    toast((j.ok ? "✅ 连通正常\n" : "❌ 失败\n") + j.detail, !!j.ok);
+  } catch(e) {
+    toast("❌ 请求失败：" + e, false);
   } finally { btn.disabled = false; btn.textContent = old; }
 }
 </script>

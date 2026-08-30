@@ -40,6 +40,22 @@ async def test_channel_crud(tmp_path, monkeypatch):
         conn.close(); conn2.close()
 
 
+async def test_channel_edit_masks_key(tmp_path, monkeypatch):
+    """编辑页回显脱敏密钥（确认已配置），但明文不出现在页面里"""
+    _setup(tmp_path, monkeypatch)
+    conn = db.connect()
+    conn.execute("INSERT INTO channel (id,name,protocol,base_url,api_key)"
+                 " VALUES (1,'c','anthropic','http://up','sk-secret-1234567890abcd')")
+    conn.commit(); conn.close()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://t") as c:
+        r = await c.get("/admin/channels/1/edit")
+    assert r.status_code == 200
+    assert "已配置 sk-sec…abcd" in r.text          # 脱敏回显
+    assert "sk-secret-1234567890abcd" not in r.text  # 明文不泄漏
+    assert "留空则不修改" in r.text
+
+
 async def test_channel_test_endpoint(tmp_path, monkeypatch):
     import app.admin.routes as admin
     _setup(tmp_path, monkeypatch)

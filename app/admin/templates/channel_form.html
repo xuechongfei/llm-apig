@@ -30,8 +30,9 @@
      value="{{ ch['base_url'] if ch else '' }}">
   </div>
   <div class="field">
-    <label>API Key{% if ch %} <span class="hint">留空则不修改</span>{% endif %}</label>
-    <input name="api_key" type="password" value="" placeholder="sk-…">
+    <label>API Key{% if ch %} <span class="hint">{% if ch['api_key'] %}已配置 {{ ch['api_key'] | mask_key }}，留空则不修改{% else %}尚未配置，可在此填入{% endif %}</span>{% endif %}</label>
+    <input name="api_key" type="password" value=""
+     placeholder="{% if ch and ch['api_key'] %}已保存密钥，留空保持不变{% else %}sk-…{% endif %}">
   </div>
   <div class="form-actions">
     <button class="btn btn-primary" type="submit">保存</button>

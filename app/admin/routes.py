@@ -24,6 +24,18 @@ def ts_fmt(value):
 
 
 templates.env.filters["ts"] = ts_fmt
+
+
+def mask_key(value):
+    """密钥脱敏回显：露头尾各几字符，短密钥全遮"""
+    if not value:
+        return ""
+    if len(value) <= 10:
+        return "•" * len(value)
+    return f"{value[:6]}…{value[-4:]}"
+
+
+templates.env.filters["mask_key"] = mask_key
 _transport = None  # 测试注入点
 
 
