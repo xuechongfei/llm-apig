@@ -32,7 +32,7 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2"
+        run: cargo install tauri-cli --version "^2" --locked
 
       - name: Build
         env:
