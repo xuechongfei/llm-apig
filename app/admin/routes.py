@@ -462,6 +462,11 @@ async def settings_data_dir(request: Request):
         set_data_dir(str(new_path))
 
         shutil.rmtree(old_path, ignore_errors=True)
+
+        # rmtree 可能把默认数据目录中的 config.json 一并删除（当 old_path
+        # 等于默认数据目录时），导致壳重启后无法读取自定义数据目录路径，
+        # 回退到默认目录并创建空数据库，配置数据全部丢失。重新写入修复。
+        set_data_dir(str(new_path))
     except Exception as e:
         return JSONResponse(
             {"ok": False, "detail": f"迁移失败: {e}"}, 500)
