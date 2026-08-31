@@ -3,6 +3,7 @@
 set -euo pipefail
 
 CONF_FILE="src-tauri/tauri.conf.json"
+PYPROJECT_FILE="pyproject.toml"
 
 # 1. 确保工作区干净
 if ! git diff-index --quiet HEAD --; then
@@ -29,8 +30,13 @@ echo "新版本:   $new_version"
 sed -i "s/\"version\": \"$current\"/\"version\": \"$new_version\"/" "$CONF_FILE"
 echo "✅ 已更新 $CONF_FILE"
 
+# 4.1 同步更新 pyproject.toml 中的版本号（build.py 从此读取版本生成 latest.json）
+sed -i "s/version = \"$current\"/version = \"$new_version\"/" "$PYPROJECT_FILE"
+echo "✅ 已更新 $PYPROJECT_FILE"
+
 # 5. 暂存版本变更文件
 git add "$CONF_FILE"
+git add "$PYPROJECT_FILE"
 
 # 如果 Cargo.toml 或权限文件有变更也一并暂存
 git add src-tauri/Cargo.toml 2>/dev/null || true
