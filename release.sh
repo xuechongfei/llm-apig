@@ -12,7 +12,7 @@ if ! git diff-index --quiet HEAD --; then
 fi
 
 # 2. 读取当前版本
-current=$(grep -oP '"version"\s*:\s*"\K[^"]+' "$CONF_FILE")
+current=$(grep '"version"' "$CONF_FILE" | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
 if [[ -z "$current" ]]; then
   echo "❌ 无法从 $CONF_FILE 中读取版本号"
   exit 1
