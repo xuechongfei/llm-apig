@@ -1,6 +1,6 @@
 [project]
 name = "llm-apig"
-version = "0.1.9"
+version = "0.1.10"
 description = "Personal LLM API gateway with failover"
 requires-python = ">=3.11"
 dependencies = [
