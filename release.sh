@@ -34,9 +34,14 @@ echo "✅ 已更新 $CONF_FILE"
 sed -i "s/version = \"$current\"/version = \"$new_version\"/" "$PYPROJECT_FILE"
 echo "✅ 已更新 $PYPROJECT_FILE"
 
+# 4.2 同步 uv.lock 中的项目版本号
+uv lock
+echo "✅ 已同步 uv.lock"
+
 # 5. 暂存版本变更文件
 git add "$CONF_FILE"
 git add "$PYPROJECT_FILE"
+git add uv.lock
 
 # 如果 Cargo.toml 或权限文件有变更也一并暂存
 git add src-tauri/Cargo.toml 2>/dev/null || true
