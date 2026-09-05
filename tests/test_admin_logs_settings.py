@@ -47,12 +47,16 @@ async def test_settings_page(tmp_path, monkeypatch):
             "cooldown_balance": "300", "cooldown_ratelimit": "45",
             "cooldown_auth": "1800", "cooldown_server": "60",
             "api_key": "k", "balance_patterns": "余额不足\nquota",
-            "capability_patterns": "not support image"})
+            "capability_patterns": "not support image",
+            "max_attempts": "8"})
         assert r.status_code == 303
         conn = db.connect()
         assert db.get_setting(conn, "cooldown_balance", "") == "300"
         assert "quota" in db.get_setting(conn, "balance_patterns", "")
+        assert db.get_setting(conn, "max_attempts", "") == "8"
         conn.close()
+        r = await c.get("/admin/settings")
+        assert r.status_code == 200 and 'name="max_attempts"' in r.text
 
 
 import json

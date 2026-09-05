@@ -365,7 +365,7 @@ async def log_detail(request: Request, log_id: int):
 
 _SETTING_KEYS = ["cooldown_balance", "cooldown_ratelimit", "cooldown_auth",
                  "cooldown_server", "api_key", "balance_patterns",
-                 "capability_patterns"]
+                 "capability_patterns", "max_attempts"]
 
 
 @router.get("/settings", response_class=HTMLResponse)
