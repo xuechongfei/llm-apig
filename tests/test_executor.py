@@ -162,6 +162,39 @@ async def test_stream_error_status_retried(tmp_path, monkeypatch):
     conn.close()
 
 
+async def test_max_attempts_setting_limits_failover(tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    for ch in range(1, 4):
+        _add_channel(conn, ch, f"c{ch}", "anthropic", ch)
+    db.set_setting(conn, "max_attempts", "2")
+    transport, calls = _mock([(500, {"e": "x"})] * 3)
+    monkeypatch.setattr(ex, "_transport", transport)
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": []}, stream=False)
+    assert r.status == 500
+    assert len(calls) == 2  # 3 个候选只尝试了 2 个
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM attempt WHERE skipped IS NULL"
+    ).fetchone()["c"]
+    assert n == 2
+    conn.close()
+
+
+async def test_max_attempts_invalid_values_fall_back(tmp_path, monkeypatch):
+    for i, bad in enumerate(["abc", "0"]):
+        conn = _conn(tmp_path / str(i), monkeypatch)
+        for ch in range(1, 7):
+            _add_channel(conn, ch, f"c{ch}", "anthropic", ch)
+        db.set_setting(conn, "max_attempts", bad)
+        transport, calls = _mock([(500, {"e": "x"})] * 6)
+        monkeypatch.setattr(ex, "_transport", transport)
+        r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                          payload={"model": "g", "messages": []}, stream=False)
+        assert r.status == 500
+        assert len(calls) == 5, f"max_attempts={bad!r} 应回退为 5 次"
+        conn.close()
+
+
 def test_render_sse_formats():
     ev = [{"type": "message_stop"}]
     assert render_sse(ev, "anthropic") == [

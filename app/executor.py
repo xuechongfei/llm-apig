@@ -11,7 +11,6 @@ from app.errors import classify_error
 from app.logging_ import add_attempt, create_log, finish_log, set_cooldown
 from app.selector import detect_modalities, select_candidates
 
-MAX_ATTEMPTS = 5
 MAX_BODY_SIZE = 100_000  # 请求报文最大存储字节数
 _transport: httpx.MockTransport | None = None  # 测试注入点
 
@@ -106,6 +105,14 @@ def _cooldown_seconds(conn, category: str, default: int) -> int:
         return fallback
 
 
+def _max_attempts(conn) -> int:
+    try:
+        n = int(get_setting(conn, "max_attempts", "5"))
+        return n if n >= 1 else 5
+    except ValueError:
+        return 5
+
+
 def _patterns(conn) -> tuple[list[str] | None, list[str] | None]:
     def load(key: str) -> list[str] | None:
         raw = get_setting(conn, key, "")
@@ -144,7 +151,7 @@ async def execute(conn, *, entry_protocol: str, group_name: str,
             entry_protocol, f"模型组 {group_name!r} 没有可用渠道", 502))
 
     last_status, last_body = 502, {}
-    for cand in candidates[:MAX_ATTEMPTS]:
+    for cand in candidates[:_max_attempts(conn)]:
         url, headers = _target(cand)
         upstream_payload = dict(payload)
         upstream_payload["model"] = cand.actual_model
