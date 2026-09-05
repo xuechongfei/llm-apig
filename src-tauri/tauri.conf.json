@@ -8,15 +8,7 @@
     "devUrl": "http://127.0.0.1:58317/admin"
   },
   "app": {
-    "withGlobalTauri": true,
-    "windows": [
-      {
-        "title": "llm-apig",
-        "width": 1200,
-        "height": 800,
-        "center": true
-      }
-    ]
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
