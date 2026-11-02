@@ -33,12 +33,17 @@ class A2OStreamConverter:
                 "usage": {"input_tokens": 0, "output_tokens": 0}}})
 
         usage = chunk.get("usage")
-        if usage:
+        # usage 可能被上游写成列表等非 dict 值；采集旁路绝不能抛异常，
+        # 否则会打断 feed() 所在转发循环，导致客户端流中断。
+        if isinstance(usage, dict) and usage:
             self._usage_seen = True
             self._input_tokens = usage.get("prompt_tokens", self._input_tokens)
             self._output_tokens = usage.get("completion_tokens",
                                             self._output_tokens)
-            details = usage.get("prompt_tokens_details") or {}
+            details = usage.get("prompt_tokens_details")
+            # 同上：非 dict 的 details 视为缺省，缓存字段按“未知”处理。
+            if not isinstance(details, dict):
+                details = {}
             cached = details.get("cached_tokens")
             if cached is None:
                 cached = usage.get("prompt_cache_hit_tokens")

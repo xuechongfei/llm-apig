@@ -109,3 +109,18 @@ def test_usage_keeps_zero_when_upstream_reports_zero():
     u = c.usage()
     assert u["input_tokens"] == 0
     assert u["output_tokens"] == 0
+
+
+def test_usage_tolerates_non_dict_prompt_tokens_details():
+    c = A2OStreamConverter("m")
+    c.feed({"id": "c1", "choices": [], "usage": {
+        "prompt_tokens": 5, "prompt_tokens_details": [1, 2]}})
+    u = c.usage()
+    assert u["input_tokens"] == 5
+    assert u["cache_read_tokens"] is None
+
+
+def test_feed_tolerates_non_dict_usage():
+    c = A2OStreamConverter("m")
+    c.feed({"id": "c1", "choices": [], "usage": [1, 2]})
+    assert c.usage()["input_tokens"] is None
