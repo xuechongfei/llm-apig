@@ -47,7 +47,7 @@ pub fn run() {
                 // 须与 tauri.conf.json 的 build.devUrl 保持一致
                 // （tauri CLI 靠 devUrl 探测 dev server 就绪）
                 tauri::WebviewUrl::External(
-                    "http://127.0.0.1:58317/admin"
+                    "http://127.0.0.1:8317/admin"
                         .parse()
                         .expect("devUrl 须为合法 URL"),
                 )

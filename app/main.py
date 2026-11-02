@@ -25,7 +25,7 @@ async def health():
 
 def main():
     init_db()
-    port = int(os.environ.get("LLMAPIG_PORT", "58317"))
+    port = int(os.environ.get("LLMAPIG_PORT", "8317"))
 
     # 端口冲突检测：僵尸 llm-apig 自动清理，其他应用占用则报错退出
     try:

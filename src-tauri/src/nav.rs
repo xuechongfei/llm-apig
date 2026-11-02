@@ -56,12 +56,12 @@ mod tests {
     #[test]
     fn allows_loopback_admin_any_port() {
         // 初始 devUrl，及 daemon 重启后 location.replace 到的新端口
-        assert!(navigation_allowed(&u("http://127.0.0.1:58317/admin")));
-        assert!(navigation_allowed(&u("http://127.0.0.1:58318/admin/channels")));
+        assert!(navigation_allowed(&u("http://127.0.0.1:8317/admin")));
+        assert!(navigation_allowed(&u("http://127.0.0.1:8318/admin/channels")));
         assert!(navigation_allowed(
-            &u("http://localhost:58317/admin/settings?x=1#frag")
+            &u("http://localhost:8317/admin/settings?x=1#frag")
         ));
-        assert!(navigation_allowed(&u("http://[::1]:58317/admin/logs")));
+        assert!(navigation_allowed(&u("http://[::1]:8317/admin/logs")));
     }
 
     #[test]
@@ -74,16 +74,16 @@ mod tests {
     #[test]
     fn denies_loopback_non_admin_path() {
         // 本 bug：健康检查是同源但非 /admin 页面（裸 JSON，无返回入口）
-        assert!(!navigation_allowed(&u("http://127.0.0.1:58317/health")));
-        assert!(!navigation_allowed(&u("http://127.0.0.1:58317/")));
-        assert!(!navigation_allowed(&u("http://localhost:58317/openapi.json")));
+        assert!(!navigation_allowed(&u("http://127.0.0.1:8317/health")));
+        assert!(!navigation_allowed(&u("http://127.0.0.1:8317/")));
+        assert!(!navigation_allowed(&u("http://localhost:8317/openapi.json")));
     }
 
     #[test]
     fn denies_admin_lookalike_prefix() {
         // 前缀匹配陷阱：/administrator 不能算 /admin
-        assert!(!navigation_allowed(&u("http://127.0.0.1:58317/administrator")));
-        assert!(!navigation_allowed(&u("http://127.0.0.1:58317/adminx")));
+        assert!(!navigation_allowed(&u("http://127.0.0.1:8317/administrator")));
+        assert!(!navigation_allowed(&u("http://127.0.0.1:8317/adminx")));
     }
 
     #[test]
