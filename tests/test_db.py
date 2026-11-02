@@ -130,3 +130,28 @@ def test_migration_preserves_data(tmp_path, monkeypatch):
     except sqlite3.IntegrityError:
         pass
     conn.close()
+
+
+def test_migration_2_to_3_adds_response_columns(tmp_path, monkeypatch):
+    """v2 → v3：request_log 增加响应报文与缓存 token 列，旧数据保留"""
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    conn = db.connect()
+    conn.executescript(db.SCHEMA)  # 基础表（v2 形态，无新列）
+    db.set_setting(conn, "schema_version", "2")
+    conn.execute("INSERT INTO request_log (created_at,client_protocol,"
+                 "group_name,path,status) VALUES"
+                 " (1.0,'anthropic','g','/v1/messages','success')")
+    conn.commit()
+    conn.close()
+
+    db.init_db()
+
+    conn = db.connect()
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(request_log)")}
+    assert {"response_body", "cache_read_tokens",
+            "cache_creation_tokens"} <= cols
+    row = conn.execute("SELECT * FROM request_log WHERE id=1").fetchone()
+    assert row["status"] == "success" and row["response_body"] is None
+    assert db.get_setting(conn, "schema_version", "0") == str(
+        len(db.MIGRATIONS))
+    conn.close()

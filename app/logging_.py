@@ -14,11 +14,16 @@ def create_log(conn, *, client_protocol, group_name, path, stream: bool,
 
 
 def finish_log(conn, log_id: int, *, status: str, total_ms: int,
-               input_tokens: int | None, output_tokens: int | None) -> None:
+               input_tokens: int | None, output_tokens: int | None,
+               cache_read_tokens: int | None = None,
+               cache_creation_tokens: int | None = None,
+               response_body: str | None = None) -> None:
     conn.execute(
         "UPDATE request_log SET status=?, total_duration_ms=?,"
-        " input_tokens=?, output_tokens=? WHERE id=?",
-        (status, total_ms, input_tokens, output_tokens, log_id),
+        " input_tokens=?, output_tokens=?, cache_read_tokens=?,"
+        " cache_creation_tokens=?, response_body=? WHERE id=?",
+        (status, total_ms, input_tokens, output_tokens, cache_read_tokens,
+         cache_creation_tokens, response_body, log_id),
     )
     conn.commit()
 

@@ -38,6 +38,23 @@ def test_log_lifecycle(tmp_path, monkeypatch):
     conn.close()
 
 
+def test_finish_log_records_response_and_cache(tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    log_id = create_log(conn, client_protocol="anthropic",
+                        group_name="g", path="/v1/messages", stream=False)
+    finish_log(conn, log_id, status="success", total_ms=1500,
+               input_tokens=10, output_tokens=20,
+               cache_read_tokens=900, cache_creation_tokens=50,
+               response_body='{"ok": true}')
+    log = conn.execute("SELECT * FROM request_log WHERE id=?",
+                       (log_id,)).fetchone()
+    assert log["total_duration_ms"] == 1500
+    assert log["cache_read_tokens"] == 900
+    assert log["cache_creation_tokens"] == 50
+    assert log["response_body"] == '{"ok": true}'
+    conn.close()
+
+
 def test_cooldown(tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)
     set_cooldown(conn, 1, 60, "boom")
