@@ -226,6 +226,26 @@ async def test_non_stream_records_response_and_cache_tokens(
     conn.close()
 
 
+async def test_non_stream_non_dict_usage_does_not_break_forwarding(
+        tmp_path, monkeypatch):
+    """上游 usage 非法（非 dict）时采集旁路跳过，客户端仍拿到 200"""
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "c1", "anthropic", 1)
+    transport, _ = _mock([(200, {
+        "id": "msg_1", "type": "message", "role": "assistant",
+        "content": [{"type": "text", "text": "hi"}],
+        "stop_reason": "end_turn",
+        "usage": [1, 2]})])
+    monkeypatch.setattr(ex, "_transport", transport)
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": []}, stream=False)
+    assert r.status == 200 and r.body["content"][0]["text"] == "hi"
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "success"
+    assert log["input_tokens"] is None and log["output_tokens"] is None
+    conn.close()
+
+
 async def test_openai_entry_non_stream_maps_cached_tokens(
         tmp_path, monkeypatch):
     conn = _conn(tmp_path, monkeypatch)

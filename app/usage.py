@@ -14,7 +14,7 @@ def empty() -> dict:
     return dict.fromkeys(FIELDS)
 
 
-def _int_or_none(value):
+def _int_or_none(value) -> int | None:
     if value is None:
         return None
     try:
@@ -23,8 +23,13 @@ def _int_or_none(value):
         return None
 
 
+def _as_dict(value) -> dict:
+    """非 dict 一律视为空，保证采集旁路不影响转发。"""
+    return value if isinstance(value, dict) else {}
+
+
 def from_anthropic_usage(usage: dict | None) -> dict:
-    usage = usage or {}
+    usage = _as_dict(usage)
     return {
         "input_tokens": _int_or_none(usage.get("input_tokens")),
         "output_tokens": _int_or_none(usage.get("output_tokens")),
@@ -36,8 +41,8 @@ def from_anthropic_usage(usage: dict | None) -> dict:
 
 
 def from_openai_usage(usage: dict | None) -> dict:
-    usage = usage or {}
-    details = usage.get("prompt_tokens_details") or {}
+    usage = _as_dict(usage)
+    details = _as_dict(usage.get("prompt_tokens_details"))
     cached = details.get("cached_tokens")
     if cached is None:
         cached = usage.get("prompt_cache_hit_tokens")

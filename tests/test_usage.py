@@ -43,3 +43,26 @@ def test_to_anthropic_usage_omits_none():
         "cache_read_tokens": 5, "cache_creation_tokens": None}) == {
         "input_tokens": 3, "output_tokens": 4,
         "cache_read_input_tokens": 5}
+
+
+def test_anthropic_usage_non_dict_is_empty():
+    """非 dict 的 usage 视为空，不得抛异常（采集必须旁路）"""
+    for bad in ([1, 2], "oops"):
+        assert from_anthropic_usage(bad) == {
+            "input_tokens": None, "output_tokens": None,
+            "cache_read_tokens": None, "cache_creation_tokens": None}
+
+
+def test_openai_usage_non_dict_details_is_empty():
+    """prompt_tokens_details 非 dict 时缓存读取为 None，其余照常"""
+    u = from_openai_usage({"prompt_tokens": 5,
+                           "prompt_tokens_details": [1, 2]})
+    assert u["input_tokens"] == 5
+    assert u["cache_read_tokens"] is None
+
+
+def test_openai_usage_non_dict_usage_is_empty():
+    """非 dict 的 usage 视为空，不得抛异常（采集必须旁路）"""
+    assert from_openai_usage(["bad"]) == {
+        "input_tokens": None, "output_tokens": None,
+        "cache_read_tokens": None, "cache_creation_tokens": None}

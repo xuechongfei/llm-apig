@@ -99,9 +99,11 @@ MIGRATIONS: list[str] = [
     """,
     # version 2 → 3: 请求日志增加响应报文与缓存 token
     """
+    BEGIN;
     ALTER TABLE request_log ADD COLUMN response_body TEXT;
     ALTER TABLE request_log ADD COLUMN cache_read_tokens INTEGER;
     ALTER TABLE request_log ADD COLUMN cache_creation_tokens INTEGER;
+    COMMIT;
     """,
 ]
 
