@@ -10,6 +10,7 @@ from app.convert import a2o, o2a, stream_a2o, stream_o2a
 from app.db import connect, get_setting
 from app.errors import classify_error
 from app.logging_ import add_attempt, create_log, finish_log, set_cooldown
+from app.reconstruct import AnthropicStreamReconstructor, parse_sse_event
 from app.selector import detect_modalities, select_candidates
 
 MAX_BODY_SIZE = 100_000  # 请求报文最大存储字节数
@@ -297,34 +298,45 @@ async def _try_stream(conn, log_id, cand, entry_protocol, url, headers,
 
     async def events() -> AsyncIterator[str]:
         failed_mid = None
+        # OpenAI 入口的流式采集不在本轮范围，recon 为 None 时保持现状
+        recon = (AnthropicStreamReconstructor()
+                 if entry_protocol == "anthropic" else None)
+        conv_usage = None
         try:
             if not cand.needs_conversion:
-                async for line in resp.aiter_text():
-                    yield line
+                buf = ""
+                async for chunk in resp.aiter_text():
+                    yield chunk  # 原样转发
+                    if recon is None:
+                        continue
+                    buf += chunk
+                    raw_events, buf = _split_sse_events(buf)
+                    for raw_event in raw_events:
+                        _safe_feed(recon, _safe_parse(raw_event))
             else:
                 converter = (stream_o2a.O2AStreamConverter(group_name)
                              if cand.protocol == "anthropic"
                              else stream_a2o.A2OStreamConverter(group_name))
                 buf = ""
-                async for chunk_bytes in resp.aiter_text():
-                    buf += chunk_bytes
-                    while "\n\n" in buf:
-                        raw_event, buf = buf.split("\n\n", 1)
-                        data = _sse_data(raw_event)
-                        if data is None:
+                async for chunk in resp.aiter_text():
+                    buf += chunk
+                    raw_events, buf = _split_sse_events(buf)
+                    for raw_event in raw_events:
+                        obj = _safe_parse(raw_event)
+                        if obj is None:
                             continue
-                        if data.strip() == "[DONE]":
-                            continue
-                        try:
-                            obj = json.loads(data)
-                        except ValueError:
-                            continue
-                        for out in render_sse(converter.feed(obj), entry_protocol):
-                            yield out
-                for out in render_sse(converter.finish(), entry_protocol):
-                    yield out
+                        for event in converter.feed(obj):
+                            if recon is not None:
+                                _safe_feed(recon, event)
+                            yield render_sse([event], entry_protocol)[0]
+                for event in converter.finish():
+                    if recon is not None:
+                        _safe_feed(recon, event)
+                    yield render_sse([event], entry_protocol)[0]
                 if entry_protocol == "openai":
                     yield "data: [DONE]\n\n"
+                if recon is not None:
+                    conv_usage = _safe_usage(converter)
         except httpx.HTTPError as e:
             failed_mid = str(e)
             for out in render_sse(
@@ -341,21 +353,82 @@ async def _try_stream(conn, log_id, cand, entry_protocol, url, headers,
             wconn = connect()
             try:
                 status = "success" if failed_mid is None else "failed"
-                finish_log(wconn, log_id, status=status,
-                           total_ms=_elapsed(started),
-                           input_tokens=None, output_tokens=None)
+                if recon is not None:
+                    # 旁路采集失败只影响日志里的出参，不能影响状态与转发
+                    try:
+                        final = recon.to_json()
+                        if final is not None and conv_usage is not None:
+                            final["usage"] = usage_mod.to_anthropic_usage(
+                                conv_usage)
+                        response_body = _sanitize_body(final) if final else None
+                        u = (conv_usage
+                             or usage_mod.from_anthropic_usage(
+                                 (final or {}).get("usage")))
+                    except Exception:
+                        response_body, u = None, usage_mod.empty()
+                    finish_log(wconn, log_id, status=status,
+                               total_ms=_elapsed(started),
+                               input_tokens=u["input_tokens"],
+                               output_tokens=u["output_tokens"],
+                               cache_read_tokens=u["cache_read_tokens"],
+                               cache_creation_tokens=u["cache_creation_tokens"],
+                               response_body=response_body)
+                else:
+                    finish_log(wconn, log_id, status=status,
+                               total_ms=_elapsed(started),
+                               input_tokens=None, output_tokens=None)
                 if failed_mid is not None:
                     verdict = classify_error(None, failed_mid)
-                    _record_failure(wconn, log_id, cand, verdict, None, failed_mid)
+                    _record_failure(wconn, log_id, cand, verdict, None,
+                                    failed_mid)
             finally:
                 wconn.close()
 
     return GatewayResult(200, events=events()), (200, {})
 
 
-def _sse_data(raw_event: str) -> str | None:
-    """从一个 SSE 事件块中提取 data 字段（可能多行）。"""
-    lines = [ln[5:] for ln in raw_event.splitlines() if ln.startswith("data:")]
-    if not lines:
+_SSE_SEPARATORS = ("\r\n\r\n", "\n\n", "\r\r")
+
+
+def _split_sse_events(buf: str) -> tuple[list[str], str]:
+    """按 SSE 空行切分事件块；返回 (完整事件块列表, 未完结的剩余缓冲)。
+
+    兼容 CRLF / LF / CR 三种行尾，避免上游只用 "\\r\\n\\r\\n" 时缓冲无限增长。
+    """
+    events: list[str] = []
+    while True:
+        idx, sep_len = -1, 0
+        for sep in _SSE_SEPARATORS:
+            i = buf.find(sep)
+            if i != -1 and (idx == -1 or i < idx):
+                idx, sep_len = i, len(sep)
+        if idx == -1:
+            return events, buf
+        events.append(buf[:idx])
+        buf = buf[idx + sep_len:]
+
+
+def _safe_parse(raw_event: str) -> dict | None:
+    """解析一个 SSE 事件块；旁路代码出任何问题都只返回 None。"""
+    try:
+        return parse_sse_event(raw_event)
+    except Exception:
         return None
-    return "\n".join(lines)
+
+
+def _safe_feed(recon, event: dict | None) -> None:
+    """把事件喂给旁路重建器；解析/重建异常一律吞掉，绝不影响转发。"""
+    if event is None:
+        return
+    try:
+        recon.feed(event)
+    except Exception:
+        pass
+
+
+def _safe_usage(converter) -> dict | None:
+    """取转换器累计用量；异常时返回 None（日志退化为无用量）。"""
+    try:
+        return converter.usage()
+    except Exception:
+        return None

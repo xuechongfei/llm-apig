@@ -246,3 +246,173 @@ async def test_openai_entry_non_stream_maps_cached_tokens(
     assert json.loads(log["response_body"])["choices"][0]["message"][
         "content"] == "hi"
     conn.close()
+
+
+async def test_stream_records_usage_cache_and_response(tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "c1", "anthropic", 1)
+    sse = (
+        b'event: message_start\ndata: {"type":"message_start","message":'
+        b'{"id":"m","model":"m","usage":{"input_tokens":3,"output_tokens":1,'
+        b'"cache_read_input_tokens":77,"cache_creation_input_tokens":5}}}\n\n'
+        b'event: content_block_start\ndata: {"type":"content_block_start",'
+        b'"index":0,"content_block":{"type":"text","text":""}}\n\n'
+        b'event: content_block_delta\ndata: {"type":"content_block_delta",'
+        b'"index":0,"delta":{"type":"text_delta","text":"hi"}}\n\n'
+        b'event: content_block_stop\ndata: {"type":"content_block_stop",'
+        b'"index":0}\n\n'
+        b'event: message_delta\ndata: {"type":"message_delta",'
+        b'"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9}}\n\n'
+        b'event: message_stop\ndata: {"type":"message_stop"}\n\n')
+
+    def handler(request):
+        return httpx.Response(200, content=sse,
+                              headers={"content-type": "text/event-stream"})
+
+    monkeypatch.setattr(ex, "_transport", httpx.MockTransport(handler))
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": [], "stream": True},
+                      stream=True)
+    forwarded = "".join([e async for e in r.events])
+    assert forwarded == sse.decode()  # 转发内容一字不改
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "success"
+    assert log["input_tokens"] == 3 and log["output_tokens"] == 9
+    assert log["cache_read_tokens"] == 77
+    assert log["cache_creation_tokens"] == 5
+    body = json.loads(log["response_body"])
+    assert body["content"] == [{"type": "text", "text": "hi"}]
+    assert body["usage"]["cache_read_input_tokens"] == 77
+    conn.close()
+
+
+async def test_stream_conversion_records_usage_and_response(
+        tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "ds", "openai", 1, model="deepseek-chat")
+    sse = (b'data: {"id":"c1","choices":[{"index":0,"delta":'
+           b'{"role":"assistant","content":"hi"},"finish_reason":null}]}\n\n'
+           b'data: {"id":"c1","choices":[{"index":0,"delta":{},'
+           b'"finish_reason":"stop"}]}\n\n'
+           b'data: {"id":"c1","choices":[],"usage":{"prompt_tokens":12,'
+           b'"completion_tokens":6,"prompt_tokens_details":'
+           b'{"cached_tokens":8}}}\n\n'
+           b'data: [DONE]\n\n')
+
+    def handler(request):
+        return httpx.Response(200, content=sse,
+                              headers={"content-type": "text/event-stream"})
+
+    monkeypatch.setattr(ex, "_transport", httpx.MockTransport(handler))
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": [], "stream": True},
+                      stream=True)
+    forwarded = "".join([e async for e in r.events])
+    assert "text_delta" in forwarded
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "success"
+    assert log["input_tokens"] == 12 and log["output_tokens"] == 6
+    assert log["cache_read_tokens"] == 8
+    body = json.loads(log["response_body"])
+    assert body["content"][0]["text"] == "hi"
+    assert body["usage"]["input_tokens"] == 12
+    assert body["usage"]["cache_read_input_tokens"] == 8
+    conn.close()
+
+
+async def test_stream_passthrough_handles_crlf_separators(
+        tmp_path, monkeypatch):
+    """上游用 CRLF 分隔事件时，转发依旧一字不改且用量/出参仍能采集。"""
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "c1", "anthropic", 1)
+    sse = (
+        b'event: message_start\r\ndata: {"type":"message_start","message":'
+        b'{"id":"m","model":"m","usage":{"input_tokens":4,"output_tokens":0}}}'
+        b'\r\n\r\n'
+        b'event: content_block_start\r\ndata: {"type":"content_block_start",'
+        b'"index":0,"content_block":{"type":"text","text":""}}\r\n\r\n'
+        b'event: content_block_delta\r\ndata: {"type":"content_block_delta",'
+        b'"index":0,"delta":{"type":"text_delta","text":"ok"}}\r\n\r\n'
+        b'event: message_delta\r\ndata: {"type":"message_delta",'
+        b'"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}'
+        b'\r\n\r\n'
+        b'event: message_stop\r\ndata: {"type":"message_stop"}\r\n\r\n')
+
+    def handler(request):
+        return httpx.Response(200, content=sse,
+                              headers={"content-type": "text/event-stream"})
+
+    monkeypatch.setattr(ex, "_transport", httpx.MockTransport(handler))
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": [], "stream": True},
+                      stream=True)
+    forwarded = "".join([e async for e in r.events])
+    assert forwarded == sse.decode()
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "success"
+    assert log["input_tokens"] == 4 and log["output_tokens"] == 2
+    assert json.loads(log["response_body"])["content"][0]["text"] == "ok"
+    conn.close()
+
+
+class _BreakingStream(httpx.AsyncByteStream):
+    """先吐一个完整事件块，再抛读错误，模拟上游流中途断开。"""
+
+    def __init__(self, first: bytes):
+        self._first = first
+
+    async def __aiter__(self):
+        yield self._first
+        raise httpx.ReadError("boom")
+
+    async def aclose(self):
+        pass
+
+
+async def test_stream_midway_error_still_logs_failed(tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "c1", "anthropic", 1)
+    first = (b'event: message_start\ndata: {"type":"message_start","message":'
+             b'{"id":"m","usage":{"input_tokens":6,"output_tokens":0}}}\n\n')
+
+    def handler(request):
+        return httpx.Response(
+            200, stream=_BreakingStream(first),
+            headers={"content-type": "text/event-stream"})
+
+    monkeypatch.setattr(ex, "_transport", httpx.MockTransport(handler))
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": [], "stream": True},
+                      stream=True)
+    text = "".join([e async for e in r.events])
+    assert text.startswith(first.decode())
+    assert "上游流中断" in text
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "failed"
+    assert log["input_tokens"] == 6  # 已收部分仍然记下来
+    conn.close()
+
+
+async def test_openai_entry_stream_stays_uncollected(tmp_path, monkeypatch):
+    """OpenAI 入口的流式请求不在本轮采集范围：原样转发、不记用量与出参。"""
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "oa", "openai", 1, model="gpt-x")
+    sse = (b'data: {"id":"c1","choices":[{"index":0,"delta":'
+           b'{"content":"hi"},"finish_reason":"stop"}]}\n\n'
+           b'data: [DONE]\n\n')
+
+    def handler(request):
+        return httpx.Response(200, content=sse,
+                              headers={"content-type": "text/event-stream"})
+
+    monkeypatch.setattr(ex, "_transport", httpx.MockTransport(handler))
+    r = await execute(conn, entry_protocol="openai", group_name="g",
+                      payload={"model": "g", "messages": [], "stream": True},
+                      stream=True)
+    forwarded = "".join([e async for e in r.events])
+    assert forwarded == sse.decode()
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "success"
+    assert log["input_tokens"] is None and log["output_tokens"] is None
+    assert log["response_body"] is None
+    conn.close()
