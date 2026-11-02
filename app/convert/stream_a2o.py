@@ -15,6 +15,7 @@ class A2OStreamConverter:
         self._input_tokens = 0
         self._output_tokens = 0
         self._cached_tokens: int | None = None
+        self._usage_seen = False
 
     def _close_open(self, events: list[dict]) -> None:
         if self._open is not None:
@@ -33,6 +34,7 @@ class A2OStreamConverter:
 
         usage = chunk.get("usage")
         if usage:
+            self._usage_seen = True
             self._input_tokens = usage.get("prompt_tokens", self._input_tokens)
             self._output_tokens = usage.get("completion_tokens",
                                             self._output_tokens)
@@ -100,8 +102,9 @@ class A2OStreamConverter:
 
     def usage(self) -> dict:
         """上游 include_usage 尾包中的累计用量，映射为网关统一字段。"""
-        raw = {"prompt_tokens": self._input_tokens or None,
-               "completion_tokens": self._output_tokens or None}
+        seen = self._usage_seen
+        raw = {"prompt_tokens": self._input_tokens if seen else None,
+               "completion_tokens": self._output_tokens if seen else None}
         if self._cached_tokens is not None:
             raw["prompt_tokens_details"] = {"cached_tokens": self._cached_tokens}
         return from_openai_usage(raw)

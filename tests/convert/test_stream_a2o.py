@@ -100,3 +100,12 @@ def test_usage_empty_when_upstream_sends_none():
     assert c.usage() == {"input_tokens": None, "output_tokens": None,
                          "cache_read_tokens": None,
                          "cache_creation_tokens": None}
+
+
+def test_usage_keeps_zero_when_upstream_reports_zero():
+    c = A2OStreamConverter("m")
+    c.feed({"id": "c1", "choices": [], "usage": {
+        "prompt_tokens": 0, "completion_tokens": 0}})
+    u = c.usage()
+    assert u["input_tokens"] == 0
+    assert u["output_tokens"] == 0
