@@ -357,12 +357,22 @@ async def _try_stream(conn, log_id, cand, entry_protocol, url, headers,
                     # 旁路采集失败只影响日志里的出参，不能影响状态与转发
                     try:
                         final = recon.to_json()
-                        if final is not None and conv_usage is not None:
-                            final["usage"] = usage_mod.to_anthropic_usage(
-                                conv_usage)
-                        response_body = _sanitize_body(final) if final else None
-                        u = (conv_usage
-                             or usage_mod.from_anthropic_usage(
+                        # conv_usage 恒为四键 dict，全 None 时仍真：
+                        # 按是否有真实取值判断，区分未上报与上报 0
+                        conv_has_usage = (
+                            conv_usage is not None and
+                            any(v is not None for v in conv_usage.values()))
+                        if final is not None and cand.needs_conversion:
+                            # 转换分支的 usage 只源于转换器：未上报时
+                            # （含中途失败未读取）留空，不沿用合成事件
+                            # 里的 0，也不推算成 0/0
+                            final["usage"] = (
+                                usage_mod.to_anthropic_usage(conv_usage)
+                                if conv_has_usage else {})
+                        response_body = (
+                            _sanitize_body(final) if final else None)
+                        u = (conv_usage if conv_has_usage
+                             else usage_mod.from_anthropic_usage(
                                  (final or {}).get("usage")))
                     except Exception:
                         response_body, u = None, usage_mod.empty()

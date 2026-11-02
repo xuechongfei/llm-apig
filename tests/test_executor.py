@@ -320,6 +320,39 @@ async def test_stream_conversion_records_usage_and_response(
     conn.close()
 
 
+async def test_stream_conversion_without_usage_records_none(
+        tmp_path, monkeypatch):
+    """OpenAI 上游整条流都没有 usage 尾包：日志用量全为 None，出参 usage 为 {}。"""
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "ds", "openai", 1, model="deepseek-chat")
+    sse = (b'data: {"id":"c1","choices":[{"index":0,"delta":'
+           b'{"role":"assistant","content":"hi"},"finish_reason":null}]}\n\n'
+           b'data: {"id":"c1","choices":[{"index":0,"delta":{},'
+           b'"finish_reason":"stop"}]}\n\n'
+           b'data: [DONE]\n\n')
+
+    def handler(request):
+        return httpx.Response(200, content=sse,
+                              headers={"content-type": "text/event-stream"})
+
+    monkeypatch.setattr(ex, "_transport", httpx.MockTransport(handler))
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": [], "stream": True},
+                      stream=True)
+    forwarded = "".join([e async for e in r.events])
+    assert "text_delta" in forwarded
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "success"
+    # 上游从未上报 usage：不得捏造 0
+    assert log["input_tokens"] is None
+    assert log["output_tokens"] is None
+    assert log["cache_read_tokens"] is None
+    body = json.loads(log["response_body"])
+    assert body["content"][0]["text"] == "hi"
+    assert body["usage"] == {}
+    conn.close()
+
+
 async def test_stream_passthrough_handles_crlf_separators(
         tmp_path, monkeypatch):
     """上游用 CRLF 分隔事件时，转发依旧一字不改且用量/出参仍能采集。"""
