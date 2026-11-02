@@ -200,3 +200,49 @@ def test_render_sse_formats():
     assert render_sse(ev, "anthropic") == [
         'event: message_stop\ndata: {"type": "message_stop"}\n\n']
     assert render_sse(ev, "openai")[0].startswith("data: ")
+
+
+async def test_non_stream_records_response_and_cache_tokens(
+        tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "c1", "anthropic", 1)
+    transport, _ = _mock([(200, {
+        "id": "msg_1", "type": "message", "role": "assistant",
+        "content": [{"type": "text", "text": "hi"}],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 10, "output_tokens": 4,
+                  "cache_read_input_tokens": 900,
+                  "cache_creation_input_tokens": 50}})])
+    monkeypatch.setattr(ex, "_transport", transport)
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": []}, stream=False)
+    assert r.status == 200
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["input_tokens"] == 10 and log["output_tokens"] == 4
+    assert log["cache_read_tokens"] == 900
+    assert log["cache_creation_tokens"] == 50
+    body = json.loads(log["response_body"])
+    assert body["content"] == [{"type": "text", "text": "hi"}]
+    conn.close()
+
+
+async def test_openai_entry_non_stream_maps_cached_tokens(
+        tmp_path, monkeypatch):
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "oa", "openai", 1, model="gpt-x")
+    transport, _ = _mock([(200, {
+        "id": "c1", "object": "chat.completion",
+        "choices": [{"index": 0, "finish_reason": "stop",
+                     "message": {"role": "assistant", "content": "hi"}}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 8,
+                  "prompt_tokens_details": {"cached_tokens": 64}}})])
+    monkeypatch.setattr(ex, "_transport", transport)
+    r = await execute(conn, entry_protocol="openai", group_name="g",
+                      payload={"model": "g", "messages": []}, stream=False)
+    assert r.status == 200
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["input_tokens"] == 100 and log["output_tokens"] == 8
+    assert log["cache_read_tokens"] == 64
+    assert json.loads(log["response_body"])["choices"][0]["message"][
+        "content"] == "hi"
+    conn.close()

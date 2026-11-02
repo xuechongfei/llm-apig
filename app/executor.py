@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from app import usage as usage_mod
 from app.convert import a2o, o2a, stream_a2o, stream_o2a
 from app.db import connect, get_setting
 from app.errors import classify_error
@@ -210,6 +211,9 @@ async def _try_non_stream(conn, log_id, cand, entry_protocol, url, headers,
 
     if resp.status_code < 400:
         body = resp.json()
+        u = (usage_mod.from_anthropic_usage(body.get("usage"))
+             if cand.protocol == "anthropic"
+             else usage_mod.from_openai_usage(body.get("usage")))
         if cand.needs_conversion:
             body = (o2a.response(body, group_name) if entry_protocol == "openai"
                     else a2o.response(body, group_name))
@@ -217,10 +221,12 @@ async def _try_non_stream(conn, log_id, cand, entry_protocol, url, headers,
                     channel_name=cand.channel_name,
                     actual_model=cand.actual_model,
                     converted=cand.needs_conversion, http_status=resp.status_code)
-        usage = body.get("usage") or {}
         finish_log(conn, log_id, status="success", total_ms=_elapsed(started),
-                   input_tokens=usage.get("input_tokens") or usage.get("prompt_tokens"),
-                   output_tokens=usage.get("output_tokens") or usage.get("completion_tokens"))
+                   input_tokens=u["input_tokens"],
+                   output_tokens=u["output_tokens"],
+                   cache_read_tokens=u["cache_read_tokens"],
+                   cache_creation_tokens=u["cache_creation_tokens"],
+                   response_body=_sanitize_body(body))
         return GatewayResult(resp.status_code, body=body), (resp.status_code, body)
 
     body_text = resp.text
