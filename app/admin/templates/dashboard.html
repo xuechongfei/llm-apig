@@ -57,7 +57,7 @@
 <td><span class="chip">{{ l["client_protocol"] }}</span></td>
 <td>{{ l["group_name"] }}</td>
 <td><span class="badge {{ 'ok' if l["status"]=='success' else 'bad' }}">{{ "成功" if l["status"]=="success" else "失败" }}</span></td>
-<td class="code">{{ l["total_duration_ms"] }}ms</td>
+<td class="code">{{ l["total_duration_ms"] | dur }}</td>
 <td><a href="/admin/logs/{{ l["id"] }}">详情</a></td>
 </tr>
 {% else %}

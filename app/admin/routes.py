@@ -1,5 +1,6 @@
-import time
+import json
 import sqlite3
+import time
 from pathlib import Path
 
 import httpx
@@ -36,6 +37,30 @@ def mask_key(value):
 
 
 templates.env.filters["mask_key"] = mask_key
+
+
+def fmt_duration(value):
+    """毫秒 → 秒（两位小数）"""
+    if value is None:
+        return "—"
+    try:
+        return f"{float(value) / 1000:.2f} s"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def pretty_json(value):
+    """JSON 字符串格式化为缩进文本，解析失败原样返回"""
+    if not value:
+        return ""
+    try:
+        return json.dumps(json.loads(value), ensure_ascii=False, indent=2)
+    except (TypeError, ValueError):
+        return value
+
+
+templates.env.filters["dur"] = fmt_duration
+templates.env.filters["pretty"] = pretty_json
 _transport = None  # 测试注入点
 
 

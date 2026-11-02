@@ -184,3 +184,32 @@ async def test_settings_page_includes_data_dir(tmp_path, monkeypatch):
         assert str(tmp_path / "data") in resp.text
 
 
+async def test_log_pages_show_seconds_pretty_json_and_cache(
+        tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO request_log (created_at,client_protocol,group_name,path,"
+        "stream,status,total_duration_ms,input_tokens,output_tokens,"
+        "cache_read_tokens,cache_creation_tokens,request_body,response_body)"
+        " VALUES (1.0,'anthropic','g','/v1/messages',0,'success',1230,10,4,"
+        "900,50,'{\"model\":\"g\"}',"
+        "'{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}')")
+    conn.commit()
+    log_id = conn.execute("SELECT id FROM request_log").fetchone()["id"]
+    conn.close()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://t") as c:
+        r = await c.get("/admin/logs")
+        assert "1.23 s" in r.text
+        assert "900" in r.text and "50" in r.text
+        assert "1230ms" not in r.text
+        r = await c.get(f"/admin/logs/{log_id}")
+        assert r.status_code == 200
+        assert "1.23 s" in r.text
+        assert "响应报文" in r.text
+        # JSON 已缩进且经 HTML 转义（引号为 &#34;）
+        assert "&#34;type&#34;: &#34;text&#34;" in r.text
+        assert '{\n  &#34;content&#34;' in r.text
+
+

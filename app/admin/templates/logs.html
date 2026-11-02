@@ -21,7 +21,7 @@
 <div class="card table-scroll">
 <table>
 <thead><tr><th>#</th><th>时间</th><th>协议</th><th>模型</th><th>流式</th>
-<th>状态</th><th>耗时</th><th>tokens (in / out)</th><th></th></tr></thead>
+<th>状态</th><th>耗时</th><th>输入</th><th>输出</th><th>缓存读</th><th>缓存写</th><th></th></tr></thead>
 <tbody>
 {% for l in logs %}
 <tr>
@@ -31,12 +31,15 @@
 <td>{{ l["group_name"] }}</td>
 <td>{{ "是" if l["stream"] else "—" }}</td>
 <td><span class="badge {{ 'ok' if l["status"]=='success' else 'bad' }}">{{ "成功" if l["status"]=="success" else "失败" }}</span></td>
-<td class="code">{{ l["total_duration_ms"] }}ms</td>
-<td class="code">{{ l["input_tokens"] }} / {{ l["output_tokens"] }}</td>
+<td class="code">{{ l["total_duration_ms"] | dur }}</td>
+<td class="code">{{ l["input_tokens"] if l["input_tokens"] is not none else "—" }}</td>
+<td class="code">{{ l["output_tokens"] if l["output_tokens"] is not none else "—" }}</td>
+<td class="code">{{ l["cache_read_tokens"] if l["cache_read_tokens"] is not none else "—" }}</td>
+<td class="code">{{ l["cache_creation_tokens"] if l["cache_creation_tokens"] is not none else "—" }}</td>
 <td><a href="/admin/logs/{{ l["id"] }}">详情</a></td>
 </tr>
 {% else %}
-<tr><td colspan="9" class="empty">没有匹配的请求记录。</td></tr>
+<tr><td colspan="12" class="empty">没有匹配的请求记录。</td></tr>
 {% endfor %}
 </tbody>
 </table>
