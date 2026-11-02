@@ -81,3 +81,22 @@ def test_text_then_tool_gets_two_blocks():
     assert [s["index"] for s in starts] == [0, 1]
     stops = [e for e in events if e["type"] == "content_block_stop"]
     assert [s["index"] for s in stops] == [0, 1]
+
+
+def test_usage_exposes_cache_tokens():
+    c = A2OStreamConverter("m")
+    c.feed({"id": "c1", "choices": [], "usage": {
+        "prompt_tokens": 100, "completion_tokens": 8,
+        "prompt_tokens_details": {"cached_tokens": 64}}})
+    assert c.usage() == {"input_tokens": 100, "output_tokens": 8,
+                         "cache_read_tokens": 64,
+                         "cache_creation_tokens": None}
+
+
+def test_usage_empty_when_upstream_sends_none():
+    c = A2OStreamConverter("m")
+    c.feed({"id": "c1", "choices": [{"index": 0, "delta": {"content": "hi"},
+                                     "finish_reason": None}]})
+    assert c.usage() == {"input_tokens": None, "output_tokens": None,
+                         "cache_read_tokens": None,
+                         "cache_creation_tokens": None}

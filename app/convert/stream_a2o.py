@@ -1,4 +1,5 @@
 from app.convert.a2o import _FINISH_MAP
+from app.usage import from_openai_usage
 
 
 class A2OStreamConverter:
@@ -13,6 +14,7 @@ class A2OStreamConverter:
         self._stop_reason: str | None = None
         self._input_tokens = 0
         self._output_tokens = 0
+        self._cached_tokens: int | None = None
 
     def _close_open(self, events: list[dict]) -> None:
         if self._open is not None:
@@ -32,7 +34,14 @@ class A2OStreamConverter:
         usage = chunk.get("usage")
         if usage:
             self._input_tokens = usage.get("prompt_tokens", self._input_tokens)
-            self._output_tokens = usage.get("completion_tokens", self._output_tokens)
+            self._output_tokens = usage.get("completion_tokens",
+                                            self._output_tokens)
+            details = usage.get("prompt_tokens_details") or {}
+            cached = details.get("cached_tokens")
+            if cached is None:
+                cached = usage.get("prompt_cache_hit_tokens")
+            if cached is not None:
+                self._cached_tokens = cached
 
         for choice in chunk.get("choices") or []:
             delta = choice.get("delta") or {}
@@ -88,3 +97,11 @@ class A2OStreamConverter:
                        "usage": {"output_tokens": self._output_tokens}})
         events.append({"type": "message_stop"})
         return events
+
+    def usage(self) -> dict:
+        """上游 include_usage 尾包中的累计用量，映射为网关统一字段。"""
+        raw = {"prompt_tokens": self._input_tokens or None,
+               "completion_tokens": self._output_tokens or None}
+        if self._cached_tokens is not None:
+            raw["prompt_tokens_details"] = {"cached_tokens": self._cached_tokens}
+        return from_openai_usage(raw)
