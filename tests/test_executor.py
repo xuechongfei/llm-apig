@@ -353,6 +353,50 @@ async def test_stream_conversion_without_usage_records_none(
     conn.close()
 
 
+# 守住 _safe_usage → conv_has_usage 的交互：usage() 抛错必须退化为
+# 「未知」，既不能捏造 0，也不能影响转发。
+async def test_stream_conversion_usage_error_degrades_to_unknown(
+        tmp_path, monkeypatch):
+    """转换器取用量抛错：日志用量全为 None，出参 usage 为 {}，转发不受影响。"""
+    conn = _conn(tmp_path, monkeypatch)
+    _add_channel(conn, 1, "ds", "openai", 1, model="deepseek-chat")
+    sse = (b'data: {"id":"c1","choices":[{"index":0,"delta":'
+           b'{"role":"assistant","content":"hi"},"finish_reason":null}]}\n\n'
+           b'data: {"id":"c1","choices":[{"index":0,"delta":{},'
+           b'"finish_reason":"stop"}]}\n\n'
+           b'data: {"id":"c1","choices":[],"usage":{"prompt_tokens":12,'
+           b'"completion_tokens":6,"prompt_tokens_details":'
+           b'{"cached_tokens":8}}}\n\n'
+           b'data: [DONE]\n\n')
+
+    def handler(request):
+        return httpx.Response(200, content=sse,
+                              headers={"content-type": "text/event-stream"})
+
+    def boom(self):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "app.convert.stream_a2o.A2OStreamConverter.usage", boom)
+    monkeypatch.setattr(ex, "_transport", httpx.MockTransport(handler))
+    r = await execute(conn, entry_protocol="anthropic", group_name="g",
+                      payload={"model": "g", "messages": [], "stream": True},
+                      stream=True)
+    forwarded = "".join([e async for e in r.events])
+    assert "text_delta" in forwarded  # 旁路取用量失败不影响客户端
+    log = conn.execute("SELECT * FROM request_log").fetchone()
+    assert log["status"] == "success"
+    # 取用量抛错时不得回退去用合成事件里的 0/6 推算
+    assert log["input_tokens"] is None
+    assert log["output_tokens"] is None
+    assert log["cache_read_tokens"] is None
+    assert log["cache_creation_tokens"] is None
+    body = json.loads(log["response_body"])
+    assert body["content"][0]["text"] == "hi"
+    assert body["usage"] == {}
+    conn.close()
+
+
 async def test_stream_passthrough_handles_crlf_separators(
         tmp_path, monkeypatch):
     """上游用 CRLF 分隔事件时，转发依旧一字不改且用量/出参仍能采集。"""
