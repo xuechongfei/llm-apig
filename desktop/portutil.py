@@ -16,15 +16,26 @@ logger = logging.getLogger(__name__)
 
 
 def _port_in_use(port: int) -> bool:
-    """检查 127.0.0.1:port 是否已被监听（TCP connect 探测）。"""
+    """检查 127.0.0.1:port 是否不可绑定（bind 探测）。
+
+    比 connect 探测严格：端口被出站连接占为本地端口时（Windows 动态
+    端口池场景）没有监听者，connect 会被拒绝从而误判为空闲，但真正
+    bind 时返回 WinError 10013。用一次短命 bind 试占，能绑定才算空闲。
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.3)
-        s.connect(("127.0.0.1", port))
-        s.close()
-        return True
-    except (ConnectionRefusedError, socket.timeout, OSError):
+        if os.name == "nt":
+            # Windows 的 SO_REUSEADDR 允许抢占已绑定端口，会让探测
+            # 误报空闲；SO_EXCLUSIVEADDRUSE 才是独占语义。
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("127.0.0.1", port))
         return False
+    except OSError:
+        return True
+    finally:
+        s.close()
 
 
 def _get_occupying_process(port: int) -> tuple[int, str] | None:

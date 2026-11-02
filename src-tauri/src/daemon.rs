@@ -73,16 +73,17 @@ fn assign_kill_on_close(child: &Child) -> Result<JobHandle, String> {
     }
 }
 
-/// TCP connect 探测端口是否被监听（不需要 HTTP 成功）。
+/// bind 探测端口是否不可用（相当于预演一次 uvicorn 的 bind）。
+///
+/// 不能用 TCP connect 探测：端口被系统出站连接占为本地端口时（Windows
+/// 动态端口池场景），connect 被拒绝会误判为空闲，真正 bind 时才报
+/// WinError 10013。Rust std 在 Windows 上的 TcpListener::bind 不设
+/// SO_REUSEADDR，等价于独占绑定，能正确识别这类占用。
 fn port_in_use(port: u16) -> bool {
-    std::net::TcpStream::connect_timeout(
-        &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
-        Duration::from_millis(300),
-    )
-    .is_ok()
+    std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).is_err()
 }
 
-/// 58317 起找第一个空闲端口（最多 +19）。被占大概率是上次残留的孤儿
+/// 8317 起找第一个空闲端口（最多 +19）。被占大概率是上次残留的孤儿
 /// daemon —— 换端口而不是杀进程，不误杀。
 fn pick_free_port(requested: u16) -> u16 {
     for port in requested..requested.saturating_add(20) {
@@ -235,7 +236,7 @@ impl DaemonHandle {
         let requested: u16 = std::env::var("LLMAPIG_PORT")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(58317);
+            .unwrap_or(8317);
 
         let exe_dir = std::env::current_exe()
             .unwrap_or_default()
@@ -586,5 +587,52 @@ impl Drop for DaemonHandle {
                 _ => std::thread::sleep(Duration::from_millis(100)),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{Ipv4Addr, TcpListener};
+    use std::time::Duration as StdDuration;
+
+    #[test]
+    fn detects_free_port() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        assert!(!port_in_use(port));
+    }
+
+    #[test]
+    fn detects_listening_port() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert!(port_in_use(port));
+    }
+
+    /// 回归：端口被出站连接占为本地端口（无监听者）也应判为占用。
+    /// 旧的 connect 探测会误判为空闲，daemon bind 时 WinError 10013。
+    #[test]
+    fn detects_port_taken_by_outbound_connection() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        // 显式 bind 再 connect，模拟系统服务把动态端口占为源端口
+        let client =
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None).unwrap();
+        client
+            .bind(&socket2::SockAddr::from(std::net::SocketAddr::from((
+                Ipv4Addr::LOCALHOST,
+                0,
+            ))))
+            .unwrap();
+        let port = client.local_addr().unwrap().as_socket().unwrap().port();
+        client
+            .connect_timeout(
+                &listener.local_addr().unwrap().into(),
+                StdDuration::from_secs(2),
+            )
+            .unwrap();
+        let _accepted = listener.accept().unwrap();
+        assert!(port_in_use(port));
     }
 }

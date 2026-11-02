@@ -25,6 +25,17 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _connects(port: int) -> bool:
+    """模拟旧的 connect 探测，用于证明该场景下它确实会误判。"""
+    try:
+        with socket.socket() as s:
+            s.settimeout(0.3)
+            s.connect(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # 端口检测
 # ---------------------------------------------------------------------------
@@ -41,6 +52,29 @@ class TestPortInUse:
             port = s.getsockname()[1]
             s.listen(1)
             assert portutil._port_in_use(port)
+
+    def test_port_taken_by_outbound_connection(self):
+        """端口被出站连接的本地端口占用（无监听者）也算占用。
+
+        回归：Windows 动态端口池里的端口常被系统出站连接临时占为源端口，
+        connect 探测连不上会误判为空闲，随后 uvicorn bind 报 WinError 10013。
+        """
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        client = socket.socket()
+        client.bind(("127.0.0.1", 0))
+        port = client.getsockname()[1]
+        client.connect(listener.getsockname())
+        accepted, _ = listener.accept()
+        try:
+            # 前置断言：确实没有监听者
+            assert not _connects(port)
+            assert portutil._port_in_use(port)
+        finally:
+            accepted.close()
+            client.close()
+            listener.close()
 
 
 class TestResolvePortConflict:
